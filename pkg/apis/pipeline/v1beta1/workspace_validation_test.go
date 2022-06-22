@@ -79,6 +79,22 @@ func TestWorkspaceBindingValidateValid(t *testing.T) {
 				SecretName: "my-secret",
 			},
 		},
+	}, {
+		name: "Valid csi",
+		binding: &WorkspaceBinding{
+			Name: "beth",
+			CSI: &corev1.CSIVolumeSource{
+				Driver: "my-csi",
+			},
+		},
+	}, {
+		name: "Invalid csi",
+		binding: &WorkspaceBinding{
+			Name: "beth",
+			CSI: &corev1.CSIVolumeSource{
+				Driver: "",
+			},
+		},
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
 			if err := tc.binding.Validate(context.Background()); err != nil {

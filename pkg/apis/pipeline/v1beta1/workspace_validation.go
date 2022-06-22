@@ -66,6 +66,11 @@ func (b *WorkspaceBinding) Validate(ctx context.Context) *apis.FieldError {
 		return apis.ErrMissingField("secret.secretName")
 	}
 
+	// For a CSI to work, you must provide the driver to use.
+	if b.CSI != nil && b.CSI.Driver == "" {
+		return apis.ErrMissingField("csi.drive")
+	}
+
 	return nil
 }
 
@@ -86,6 +91,9 @@ func (b *WorkspaceBinding) numSources() int {
 		n++
 	}
 	if b.Secret != nil {
+		n++
+	}
+	if b.CSI != nil {
 		n++
 	}
 	return n
