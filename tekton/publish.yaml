@@ -95,13 +95,13 @@ spec:
 
       # Combine Distroless with a Windows base image, used for the entrypoint image.
       COMBINED_BASE_IMAGE=$(go run ./vendor/github.com/tektoncd/plumbing/cmd/combine/main.go \
-        gcr.io/distroless/base:debug-nonroot \
-        mcr.microsoft.com/windows/nanoserver:1809 \
+        ghcr.io/distroless/static \
+        mcr.microsoft.com/windows/nanoserver:ltsc2022 \
         ${CONTAINER_REGISTRY}/$(params.package)/combined-base-image:latest)
 
       cat <<EOF > ${PROJECT_ROOT}/.ko.yaml
       # This matches the value configured in .ko.yaml
-      defaultBaseImage: gcr.io/distroless/static:nonroot
+      defaultBaseImage: ghcr.io/distroless/static
       baseImageOverrides:
         # Use the combined base image for images that should include Windows support.
         $(params.package)/cmd/entrypoint: ${COMBINED_BASE_IMAGE}
@@ -109,19 +109,16 @@ spec:
         $(params.package)/cmd/workingdirinit: ${COMBINED_BASE_IMAGE}
 
         # This matches values configured in .ko.yaml
-        $(params.package)/cmd/git-init: ${CONTAINER_REGISTRY}/$(params.package)/git-init-build-base:latest
-        $(params.package)/cmd/pullrequest-init: gcr.io/distroless/static
+        $(params.package)/cmd/git-init: ghcr.io/distroless/git
       EOF
 
       cat ${PROJECT_ROOT}/.ko.yaml
 
   - name: run-ko
-    image: gcr.io/tekton-releases/dogfooding/ko@sha256:017286320827046fbdfc5e072faf4603d85287609a17ab1827f1210ac9edfc72
+    image: gcr.io/tekton-releases/dogfooding/ko@sha256:aafcfa5c22281f9e882664c3e5f234a2069a0050674c0c8d9908ccae6f0e8457
     env:
     - name: KO_DOCKER_REPO
       value: $(params.imageRegistry)/$(params.imageRegistryPath)
-    - name: GO111MODULE
-      value: "off"
     - name: GOFLAGS
       value: "-mod=vendor"
     script: |

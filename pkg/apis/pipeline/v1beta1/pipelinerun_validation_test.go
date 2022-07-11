@@ -92,36 +92,7 @@ func TestPipelineRun_Invalid(t *testing.T) {
 				Status: "PipelineRunCancell",
 			},
 		},
-		want: apis.ErrInvalidValue("PipelineRunCancell should be PipelineRunCancelled or PipelineRunPending", "spec.status"),
-	}, {
-		name: "wrong pipelinerun cancel with alpha features",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinelinename",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				PipelineRef: &v1beta1.PipelineRef{
-					Name: "prname",
-				},
-				Status: "PipelineRunCancell",
-			},
-		},
 		want: apis.ErrInvalidValue("PipelineRunCancell should be Cancelled, CancelledRunFinally, StoppedRunFinally or PipelineRunPending", "spec.status"),
-		wc:   enableAlphaAPIFields,
-	}, {
-		name: "alpha pipelinerun graceful cancel",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinelinename",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				PipelineRef: &v1beta1.PipelineRef{
-					Name: "prname",
-				},
-				Status: v1beta1.PipelineRunSpecStatusCancelled,
-			},
-		},
-		want: apis.ErrGeneric("graceful termination requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\""),
 	}, {
 		name: "use of bundle without the feature flag set",
 		pr: v1beta1.PipelineRun{
@@ -259,12 +230,10 @@ func TestPipelineRun_Validate(t *testing.T) {
 								Type: v1beta1.ParamTypeArray,
 							}},
 							Steps: []v1beta1.Step{{
-								Container: corev1.Container{
-									Name:    "echo",
-									Image:   "ubuntu",
-									Command: []string{"echo"},
-									Args:    []string{"$(params.task-words[*])"},
-								},
+								Name:    "echo",
+								Image:   "ubuntu",
+								Command: []string{"echo"},
+								Args:    []string{"$(params.task-words[*])"},
 							}},
 						}},
 					}},
@@ -311,20 +280,6 @@ func TestPipelineRun_Validate(t *testing.T) {
 				},
 			},
 		},
-		wc: enableAlphaAPIFields,
-	}, {
-		name: "pipelinerun cancelled deprecated",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinerunname",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				Status: v1beta1.PipelineRunSpecStatusCancelledDeprecated,
-				PipelineRef: &v1beta1.PipelineRef{
-					Name: "prname",
-				},
-			},
-		},
 	}, {
 		name: "pipelinerun gracefully cancelled",
 		pr: v1beta1.PipelineRun{
@@ -338,7 +293,6 @@ func TestPipelineRun_Validate(t *testing.T) {
 				},
 			},
 		},
-		wc: enableAlphaAPIFields,
 	}, {
 		name: "pipelinerun gracefully stopped",
 		pr: v1beta1.PipelineRun{
@@ -352,7 +306,6 @@ func TestPipelineRun_Validate(t *testing.T) {
 				},
 			},
 		},
-		wc: enableAlphaAPIFields,
 	}, {
 		name: "alpha feature: valid resolver",
 		pr: v1beta1.PipelineRun{
@@ -577,7 +530,7 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 				},
 			},
 		},
-		wantErr: apis.ErrDisallowedFields("stepOverrides").ViaIndex(0).ViaField("taskRunSpecs"),
+		wantErr: apis.ErrGeneric("stepOverrides requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
 	}, {
 		name: "sidecarOverride disallowed without alpha feature gate",
 		spec: v1beta1.PipelineRunSpec{
@@ -594,7 +547,7 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 				},
 			},
 		},
-		wantErr: apis.ErrDisallowedFields("sidecarOverrides").ViaIndex(0).ViaField("taskRunSpecs"),
+		wantErr: apis.ErrGeneric("sidecarOverrides requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
 	}, {
 		name: "missing stepOverride name",
 		spec: v1beta1.PipelineRunSpec{
@@ -644,7 +597,46 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 		},
 		wantErr:     apis.ErrMissingField("taskRunSpecs[0].sidecarOverrides[0].name"),
 		withContext: enableAlphaAPIFields,
+	}, {
+		name: "invalid both step-level (stepOverrides.resources) and task-level (taskRunSpecs.resources) resource requirements configured",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "pipeline"},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
+				{
+					PipelineTaskName: "pipelineTask",
+					StepOverrides: []v1beta1.TaskRunStepOverride{{
+						Name: "stepOverride",
+						Resources: corev1.ResourceRequirements{
+							Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
+						}},
+					},
+					ComputeResources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("2Gi")},
+					},
+				},
+			},
+		},
+		wantErr: apis.ErrMultipleOneOf(
+			"taskRunSpecs[0].stepOverrides.resources",
+			"taskRunSpecs[0].computeResources",
+		),
+		withContext: enableAlphaAPIFields,
+	}, {
+		name: "computeResources disallowed without alpha feature gate",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "foo"},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{
+				{
+					PipelineTaskName: "bar",
+					ComputeResources: &corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("2Gi")},
+					},
+				},
+			},
+		},
+		wantErr: apis.ErrGeneric("computeResources requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\"").ViaIndex(0).ViaField("taskRunSpecs"),
 	}}
+
 	for _, ps := range tests {
 		t.Run(ps.name, func(t *testing.T) {
 			ctx := context.Background()
@@ -661,8 +653,9 @@ func TestPipelineRunSpec_Invalidate(t *testing.T) {
 
 func TestPipelineRunSpec_Validate(t *testing.T) {
 	tests := []struct {
-		name string
-		spec v1beta1.PipelineRunSpec
+		name        string
+		spec        v1beta1.PipelineRunSpec
+		withContext func(context.Context) context.Context
 	}{{
 		name: "PipelineRun without pipelineRef",
 		spec: v1beta1.PipelineRunSpec{
@@ -675,22 +668,64 @@ func TestPipelineRunSpec_Validate(t *testing.T) {
 				}},
 			},
 		},
+	}, {
+		name: "valid task-level (taskRunSpecs.resources) resource requirements configured",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "pipeline"},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "pipelineTask",
+				StepOverrides: []v1beta1.TaskRunStepOverride{{
+					Name: "stepOverride",
+				}},
+				ComputeResources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("2Gi")},
+				},
+			}},
+		},
+		withContext: enableAlphaAPIFields,
+	}, {
+		name: "valid sidecar and task-level (taskRunSpecs.resources) resource requirements configured",
+		spec: v1beta1.PipelineRunSpec{
+			PipelineRef: &v1beta1.PipelineRef{Name: "pipeline"},
+			TaskRunSpecs: []v1beta1.PipelineTaskRunSpec{{
+				PipelineTaskName: "pipelineTask",
+				StepOverrides: []v1beta1.TaskRunStepOverride{{
+					Name: "stepOverride",
+				}},
+				ComputeResources: &corev1.ResourceRequirements{
+					Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("2Gi")},
+				},
+				SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
+					Name: "sidecar",
+					Resources: corev1.ResourceRequirements{
+						Requests: corev1.ResourceList{
+							corev1.ResourceMemory: corev1resources.MustParse("4Gi"),
+						},
+					},
+				}},
+			}},
+		},
+		withContext: enableAlphaAPIFields,
 	}}
+
 	for _, ps := range tests {
 		t.Run(ps.name, func(t *testing.T) {
-			if err := ps.spec.Validate(context.Background()); err != nil {
+			ctx := context.Background()
+			if ps.withContext != nil {
+				ctx = ps.withContext(ctx)
+			}
+			if err := ps.spec.Validate(ctx); err != nil {
 				t.Error(err)
 			}
 		})
 	}
 }
 
-func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
+func TestPipelineRun_InvalidTimeouts(t *testing.T) {
 	tests := []struct {
 		name string
 		pr   v1beta1.PipelineRun
 		want *apis.FieldError
-		wc   func(context.Context) context.Context
 	}{{
 		name: "negative pipeline timeouts",
 		pr: v1beta1.PipelineRun{
@@ -707,7 +742,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 			},
 		},
 		want: apis.ErrInvalidValue("-48h0m0s should be >= 0", "spec.timeouts.pipeline"),
-		wc:   enableAlphaAPIFields,
 	}, {
 		name: "negative pipeline tasks Timeout",
 		pr: v1beta1.PipelineRun{
@@ -724,7 +758,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 			},
 		},
 		want: apis.ErrInvalidValue("-48h0m0s should be >= 0", "spec.timeouts.tasks"),
-		wc:   enableAlphaAPIFields,
 	}, {
 		name: "negative pipeline finally Timeout",
 		pr: v1beta1.PipelineRun{
@@ -741,7 +774,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 			},
 		},
 		want: apis.ErrInvalidValue("-48h0m0s should be >= 0", "spec.timeouts.finally"),
-		wc:   enableAlphaAPIFields,
 	}, {
 		name: "pipeline tasks Timeout > pipeline Timeout",
 		pr: v1beta1.PipelineRun{
@@ -759,7 +791,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 			},
 		},
 		want: apis.ErrInvalidValue("1h0m0s should be <= pipeline duration", "spec.timeouts.tasks"),
-		wc:   enableAlphaAPIFields,
 	}, {
 		name: "pipeline finally Timeout > pipeline Timeout",
 		pr: v1beta1.PipelineRun{
@@ -777,7 +808,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 			},
 		},
 		want: apis.ErrInvalidValue("1h0m0s should be <= pipeline duration", "spec.timeouts.finally"),
-		wc:   enableAlphaAPIFields,
 	}, {
 		name: "pipeline tasks Timeout +  pipeline finally Timeout > pipeline Timeout",
 		pr: v1beta1.PipelineRun{
@@ -796,25 +826,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 			},
 		},
 		want: apis.ErrInvalidValue("30m0s + 30m0s should be <= pipeline duration", "spec.timeouts.finally, spec.timeouts.tasks"),
-		wc:   enableAlphaAPIFields,
-	}, {
-		name: "Invalid Timeouts when alpha fields not enabled",
-		pr: v1beta1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: "pipelinelinename",
-			},
-			Spec: v1beta1.PipelineRunSpec{
-				PipelineRef: &v1beta1.PipelineRef{
-					Name: "prname",
-				},
-				Timeouts: &v1beta1.TimeoutFields{
-					Pipeline: &metav1.Duration{Duration: 1 * time.Hour},
-					Tasks:    &metav1.Duration{Duration: 30 * time.Minute},
-					Finally:  &metav1.Duration{Duration: 30 * time.Minute},
-				},
-			},
-		},
-		want: apis.ErrGeneric(`timeouts requires "enable-api-fields" feature gate to be "alpha" but it is "stable"`),
 	}, {
 		name: "Tasks timeout = 0 but Pipeline timeout not set",
 		pr: v1beta1.PipelineRun{
@@ -830,7 +841,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 				},
 			},
 		},
-		wc:   enableAlphaAPIFields,
 		want: apis.ErrInvalidValue(`0s (no timeout) should be <= default timeout duration`, "spec.timeouts.tasks"),
 	}, {
 		name: "Tasks timeout = 0 but Pipeline timeout is not 0",
@@ -848,7 +858,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 				},
 			},
 		},
-		wc:   enableAlphaAPIFields,
 		want: apis.ErrInvalidValue(`0s (no timeout) should be <= pipeline duration`, "spec.timeouts.tasks"),
 	}, {
 		name: "Finally timeout = 0 but Pipeline timeout not set",
@@ -865,7 +874,6 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 				},
 			},
 		},
-		wc:   enableAlphaAPIFields,
 		want: apis.ErrInvalidValue(`0s (no timeout) should be <= default timeout duration`, "spec.timeouts.finally"),
 	}, {
 		name: "Finally timeout = 0 but Pipeline timeout is not 0",
@@ -883,16 +891,29 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 				},
 			},
 		},
-		wc:   enableAlphaAPIFields,
 		want: apis.ErrInvalidValue(`0s (no timeout) should be <= pipeline duration`, "spec.timeouts.finally"),
+	}, {
+		name: "Timeout and Timeouts both are set",
+		pr: v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pipelinelinename",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "prname",
+				},
+				Timeout: &metav1.Duration{Duration: 10 * time.Minute},
+				Timeouts: &v1beta1.TimeoutFields{
+					Pipeline: &metav1.Duration{Duration: 10 * time.Minute},
+				},
+			},
+		},
+		want: apis.ErrDisallowedFields("spec.timeout", "spec.timeouts"),
 	}}
 
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			ctx := context.Background()
-			if tc.wc != nil {
-				ctx = tc.wc(ctx)
-			}
 			err := tc.pr.Validate(ctx)
 			if d := cmp.Diff(err.Error(), tc.want.Error()); d != "" {
 				t.Error(diff.PrintWantGot(d))
@@ -901,7 +922,7 @@ func TestPipelineRunWithAlphaFields_Invalid(t *testing.T) {
 	}
 }
 
-func TestPipelineRunWithAlphaFields_Validate(t *testing.T) {
+func TestPipelineRunWithTimeout_Validate(t *testing.T) {
 	tests := []struct {
 		name string
 		pr   v1beta1.PipelineRun
@@ -923,7 +944,23 @@ func TestPipelineRunWithAlphaFields_Validate(t *testing.T) {
 				},
 			},
 		},
-		wc: enableAlphaAPIFields,
+	}, {
+		name: "Timeouts set for all three Task, Finally and Pipeline",
+		pr: v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "pipelinelinename",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "prname",
+				},
+				Timeouts: &v1beta1.TimeoutFields{
+					Pipeline: &metav1.Duration{Duration: 1 * time.Hour},
+					Tasks:    &metav1.Duration{Duration: 30 * time.Minute},
+					Finally:  &metav1.Duration{Duration: 30 * time.Minute},
+				},
+			},
+		},
 	}}
 
 	for _, ts := range tests {

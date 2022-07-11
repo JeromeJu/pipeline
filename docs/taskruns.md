@@ -14,10 +14,11 @@ weight: 300
   - [Tekton Bundles](#tekton-bundles)
   - [Remote Tasks](#remote-tasks)
   - [Specifying `Parameters`](#specifying-parameters)
-    - [Implicit Parameters](#implicit-parameters)
+    - [Propagated Parameters](#propagated-parameters)
     - [Extra Parameters](#extra-parameters)
   - [Specifying `Resources`](#specifying-resources)
   - [Specifying `Resource` limits](#specifying-resource-limits)
+  - [Specifying Task-level `ComputeResources`](#specifying-task-level-computeresources)
   - [Specifying a `Pod` template](#specifying-a-pod-template)
   - [Specifying `Workspaces`](#specifying-workspaces)
   - [Specifying `Sidecars`](#specifying-sidecars)
@@ -96,14 +97,13 @@ You can also embed the desired `Task` definition directly in the `TaskRun` using
 ```yaml
 spec:
   taskSpec:
-    resources:
-      inputs:
-        - name: workspace
-          type: git
+    workspaces:
+    - name: source
     steps:
       - name: build-and-push
         image: gcr.io/kaniko-project/executor:v0.17.1
         # specifying DOCKER_CONFIG is required to allow kaniko to detect docker credential
+        workingDir: $(workspaces.source.path)
         env:
           - name: "DOCKER_CONFIG"
             value: "/tekton/home/.docker/"
@@ -167,8 +167,6 @@ cli *(coming soon)*.
 
 **([alpha only](https://github.com/tektoncd/pipeline/blob/main/docs/install.md#alpha-features))**
 
-**Warning: This feature is still in very early stage of development and is not yet functional. Do not use it.**
-
 A `taskRef` field may specify a Task in a remote location such as git.
 Support for specific types of remote will depend on the Resolvers your
 cluster's operator has installed. The below example demonstrates
@@ -179,7 +177,7 @@ spec:
   taskRef:
     resolver: git
     resource:
-    - name: repo
+    - name: url
       value: https://github.com/tektoncd/catalog.git
     - name: commit
       value: abc123
@@ -189,7 +187,7 @@ spec:
 
 ### Specifying `Parameters`
 
-If a `Task` has [`parameters`](tasks.md#parameters), you can use the `params` field to specify their values:
+If a `Task` has [`parameters`](tasks.md#specifying-parameters), you can use the `params` field to specify their values:
 
 ```yaml
 spec:
@@ -200,7 +198,7 @@ spec:
 
 **Note:** If a parameter does not have an implicit default value, you must explicitly set its value.
 
-#### Implicit Parameters
+#### Propagated Parameters
 
 **([alpha only](https://github.com/tektoncd/pipeline/blob/main/docs/install.md#alpha-features))**
 
@@ -226,33 +224,46 @@ spec:
         echo $(params.message)
 ```
 
-On creation, this will resolve to a fully-formed spec and will be returned back
-to clients to avoid ambiguity:
+On executing the task run, the parameters will be interpolated during resolution.
+The specifications are not mutated before storage and so it remains the same.
+The status is updated.
 
 ```yaml
-apiVersion: tekton.dev/v1beta1
 kind: TaskRun
 metadata:
-  generateName: hello-
+  name: hello-dlqm9
+  ...
 spec:
   params:
-    - name: message
-      value: "hello world!"
+  - name: message
+    value: hello world!
+  serviceAccountName: default
   taskSpec:
-    params:
-    - name: message
-      type: string
     steps:
-    - name: default
-      image: ubuntu
+    - image: ubuntu
+      name: default
+      resources: {}
       script: |
         echo $(params.message)
+status:
+  conditions:
+  - lastTransitionTime: "2022-05-20T15:24:41Z"
+    message: All Steps have completed executing
+    reason: Succeeded
+    status: "True"
+    type: Succeeded
+  ... 
+  steps:
+  - container: step-default
+    ...  
+  taskSpec:
+    steps:
+    - image: ubuntu
+      name: default
+      resources: {}
+      script: |
+        echo "hello world!"
 ```
-
-Note that all implicit Parameters will be passed through to inlined resource,
-even if they are not used. Extra parameters passed this way should generally
-be safe (since they aren't actually used), but may result in more verbose specs
-being returned by the API.
 
 #### Extra Parameters
 
@@ -312,6 +323,40 @@ spec:
 Each Step in a Task can specify its resource requirements. See
 [Defining `Steps`](tasks.md#defining-steps). Resource requirements defined in Steps and Sidecars
 may be overridden by a TaskRun's StepOverrides and SidecarOverrides.
+
+### Specifying Task-level `ComputeResources`
+
+**([alpha only](https://github.com/tektoncd/pipeline/blob/main/docs/install.md#alpha-features))**
+(This feature is under development and not functional yet. Stay tuned!)
+
+Task-level compute resources can be configured in `TaskRun.ComputeResources`, or `PipelineRun.TaskRunSpecs.ComputeResources`.
+
+e.g.
+
+```yaml
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: task
+spec:
+  steps:
+    - name: foo
+---
+apiVersion: tekton.dev/v1beta1
+kind: TaskRun
+metadata:
+  name: taskrun 
+spec:
+  taskRef:
+    name: task
+  computeResources:
+    requests:
+      cpu: 1 
+    limits:
+      cpu: 2
+```
+
+Further details and examples could be found in [Compute Resources in Tekton](https://github.com/tektoncd/pipeline/blob/main/docs/compute-resources.md).
 
 ### Specifying a `Pod` template
 
@@ -469,7 +514,7 @@ time from the invoked `Task`, Tekton will requests the compute values for CPU, m
 storage for each `Step` based on the [`LimitRange`](https://kubernetes.io/docs/concepts/policy/limit-range/)
 object(s), if present. Any `Request` or `Limit` specified by the user (on `Task` for example) will be left unchanged.
 
-For more information, see the [`LimitRange` support in Pipeline](./limitrange.md).
+For more information, see the [`LimitRange` support in Pipeline](./compute-resources.md#limitrange-support).
 
 ### Configuring the failure timeout
 
@@ -549,6 +594,7 @@ False|\[Error message\]|No|The TaskRun encountered a non-permanent error, and it
 False|\[Error message\]|Yes|The TaskRun failed with a permanent error (usually validation).
 False|TaskRunCancelled|Yes|The TaskRun was cancelled successfully.
 False|TaskRunTimeout|Yes|The TaskRun timed out.
+False|TaskRunImagePullFailed|Yes|The TaskRun failed due to one of its steps not being able to pull the image. 
 
 When a `TaskRun` changes status, [events](events.md#taskruns) are triggered accordingly.
 
@@ -615,7 +661,7 @@ in order to stop `TaskRun` step containers from running.
 Example of cancelling a `TaskRun`:
 
 ```yaml
-apiVersion: tekton.dev/v1alpha1
+apiVersion: tekton.dev/v1beta1
 kind: TaskRun
 metadata:
   name: go-example-git
@@ -637,7 +683,7 @@ spec:
     breakpoint: ["onFailure"]
 ```
 
-Upon failure of a step, the TaskRun Pod execution is halted. If ths TaskRun Pod continues to run without any lifecycle
+Upon failure of a step, the TaskRun Pod execution is halted. If this TaskRun Pod continues to run without any lifecycle
 change done by the user (running the debug-continue or debug-fail-continue script) the TaskRun would be subject to
 [TaskRunTimeout](#configuring-the-failure-timeout).
 During this time, the user/client can get remote shell access to the step container with a command such as the following.
@@ -674,33 +720,21 @@ To better understand `TaskRuns`, study the following code examples:
 ### Example `TaskRun` with a referenced `Task`
 
 In this example, a `TaskRun` named `read-repo-run` invokes and executes an existing
-`Task` named `read-task`. This `Task` uses a git input resource that the `TaskRun`
-references as `go-example-git`.
+`Task` named `read-task`. This `Task` reads the repository from the
+"input" `workspace`.
 
 ```yaml
-apiVersion: tekton.dev/v1alpha1
-kind: PipelineResource
-metadata:
-  name: go-example-git
-spec:
-  type: git
-  params:
-    - name: url
-      value: https://github.com/pivotal-nader-ziada/gohelloworld
----
 apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: read-task
 spec:
-  resources:
-    inputs:
-      - name: workspace
-        type: git
+  workspaces:
+  - name: input
   steps:
     - name: readme
       image: ubuntu
-      script: cat workspace/README.md
+      script: cat $(workspaces.input.path)/README.md
 ---
 apiVersion: tekton.dev/v1beta1
 kind: TaskRun
@@ -709,11 +743,11 @@ metadata:
 spec:
   taskRef:
     name: read-task
-  resources:
-    inputs:
-      - name: workspace
-        resourceRef:
-          name: go-example-git
+  workspaces:
+  - name: input
+    persistentVolumeClaim:
+      claimName: mypvc
+    subPath: my-subdir
 ```
 
 ### Example `TaskRun` with an embedded `Task`
@@ -722,34 +756,22 @@ In this example, a `TaskRun` named `build-push-task-run-2` directly executes
 a `Task` from its definition embedded in the `TaskRun's` `taskSpec` field:
 
 ```yaml
-apiVersion: tekton.dev/v1alpha1
-kind: PipelineResource
-metadata:
-  name: go-example-git
-spec:
-  type: git
-  params:
-    - name: url
-      value: https://github.com/pivotal-nader-ziada/gohelloworld
----
 apiVersion: tekton.dev/v1beta1
 kind: TaskRun
 metadata:
   name: build-push-task-run-2
 spec:
-  resources:
-    inputs:
-      - name: workspace
-        resourceRef:
-          name: go-example-git
+  workspaces:
+  - name: source
+    persistentVolumeClaim:
+      claimName: my-pvc
   taskSpec:
-    resources:
-      inputs:
-        - name: workspace
-          type: git
+    workspaces:
+    - name: source
     steps:
       - name: build-and-push
         image: gcr.io/kaniko-project/executor:v0.17.1
+        workingDir: $(workspaces.source.path)
         # specifying DOCKER_CONFIG is required to allow kaniko to detect docker credential
         env:
           - name: "DOCKER_CONFIG"
@@ -781,106 +803,6 @@ spec:
               value: https://github.com/pivotal-nader-ziada/gohelloworld
 ```
 
-### Example of Reusing a `Task`
-
-The following example illustrates the reuse of the same `Task`. Below, you can see
-several `TaskRuns` that instantiate a `Task` named `dockerfile-build-and-push`. The
-`TaskRuns` reference different `Resources` as their inputs.
-See [Building and pushing a Docker image](tasks.md#building-and-pushing-a-docker-image)
-for the full definition of this example `Task.`
-
-This `TaskRun` builds `mchmarny/rester-tester`:
-
-```yaml
-# This is the referenced PipelineResource
-metadata:
-  name: mchmarny-repo
-spec:
-  type: git
-  params:
-    - name: url
-      value: https://github.com/mchmarny/rester-tester.git
-```
-
-```yaml
-# This is the TaskRun
-spec:
-  taskRef:
-    name: dockerfile-build-and-push
-  params:
-    - name: IMAGE
-      value: gcr.io/my-project/rester-tester
-  resources:
-    inputs:
-      - name: workspace
-        resourceRef:
-          name: mchmarny-repo
-```
-
-This `TaskRun` builds the `wget` builder from `googlecloudplatform/cloud-builder`:
-
-```yaml
-# This is the referenced PipelineResource
-metadata:
-  name: cloud-builder-repo
-spec:
-  type: git
-  params:
-    - name: url
-      value: https://github.com/googlecloudplatform/cloud-builders.git
-```
-
-```yaml
-# This is the TaskRun
-spec:
-  taskRef:
-    name: dockerfile-build-and-push
-  params:
-    - name: IMAGE
-      value: gcr.io/my-project/wget
-    # Optional override to specify the subdirectory containing the Dockerfile
-    - name: DIRECTORY
-      value: /workspace/wget
-  resources:
-    inputs:
-      - name: workspace
-        resourceRef:
-          name: cloud-builder-repo
-```
-
-This `TaskRun` builds the `docker` builder from `googlecloudplatform/cloud-builder` with `17.06.1`:
-
-```yaml
-# This is the referenced PipelineResource
-metadata:
-  name: cloud-builder-repo
-spec:
-  type: git
-  params:
-    - name: url
-      value: https://github.com/googlecloudplatform/cloud-builders.git
-```
-
-```yaml
-# This is the TaskRun
-spec:
-  taskRef:
-    name: dockerfile-build-and-push
-  params:
-    - name: IMAGE
-      value: gcr.io/my-project/docker
-    # Optional overrides
-    - name: DIRECTORY
-      value: /workspace/docker
-    - name: DOCKERFILE_NAME
-      value: Dockerfile-17.06.1
-  resources:
-    inputs:
-      - name: workspace
-        resourceRef:
-          name: cloud-builder-repo
-```
-
 ### Example of Using custom `ServiceAccount` credentials
 
 The example below illustrates how to specify a `ServiceAccount` to access a private `git` repository:
@@ -892,24 +814,18 @@ metadata:
   name: test-task-with-serviceaccount-git-ssh
 spec:
   serviceAccountName: test-task-robot-git-ssh
-  resources:
-    inputs:
-      - name: workspace
-        resourceSpec:
-          type: git
-          params:
-            - name: url
-              value: https://github.com/tektoncd/pipeline.git
-  taskSpec:
-    resources:
-      inputs:
-        - name: workspace
-          type: git
-    steps:
-      - name: config
-        image: ubuntu
-        command: ["/bin/bash"]
-        args: ["-c", "cat README.md"]
+  workspaces:
+  - name: source
+    persistentVolumeClaim:
+      claimName: repo-pvc
+  - name: ssh-creds
+    secret:
+      secretName: test-git-ssh
+  params:
+    - name: url
+      value: https://github.com/tektoncd/pipeline.git
+  taskRef:
+    name: git-clone
 ```
 
 In the above code snippet, `serviceAccountName: test-build-robot-git-ssh` references the following
@@ -924,7 +840,7 @@ secrets:
   - name: test-git-ssh
 ```
 
-And `name: test-git-ssh` references the following `Secret`:
+And `secretName: test-git-ssh` references the following `Secret`:
 
 ```yaml
 apiVersion: v1

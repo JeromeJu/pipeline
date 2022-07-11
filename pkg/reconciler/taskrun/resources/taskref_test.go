@@ -20,17 +20,18 @@ import (
 	"context"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
+	"github.com/tektoncd/pipeline/test/parse"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -51,9 +52,7 @@ var (
 		},
 		Spec: v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image: "something",
-				},
+				Image: "something",
 			}},
 		},
 	}
@@ -67,13 +66,57 @@ var (
 		},
 		Spec: v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image: "something",
-				},
+				Image: "something",
 			}},
 		},
 	}
 )
+
+func TestGetTaskKind(t *testing.T) {
+	testCases := []struct {
+		name     string
+		tr       *v1beta1.TaskRun
+		expected v1beta1.TaskKind
+	}{
+		{
+			name: "no task ref",
+			tr: &v1beta1.TaskRun{
+				Spec: v1beta1.TaskRunSpec{
+					TaskSpec: &v1beta1.TaskSpec{},
+				},
+			},
+			expected: v1beta1.NamespacedTaskKind,
+		}, {
+			name: "no kind on task ref",
+			tr: &v1beta1.TaskRun{
+				Spec: v1beta1.TaskRunSpec{
+					TaskRef: &v1beta1.TaskRef{Name: "whatever"},
+				},
+			},
+			expected: v1beta1.NamespacedTaskKind,
+		}, {
+			name: "kind on task ref",
+			tr: &v1beta1.TaskRun{
+				Spec: v1beta1.TaskRunSpec{
+					TaskRef: &v1beta1.TaskRef{
+						Name: "whatever",
+						Kind: "something-else",
+					},
+				},
+			},
+			expected: v1beta1.TaskKind("something-else"),
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			tk := resources.GetTaskKind(tc.tr)
+			if tk != tc.expected {
+				t.Errorf("expected kind %s, but got %s", tc.expected, tk)
+			}
+		})
+	}
+}
 
 func TestLocalTaskRef(t *testing.T) {
 	testcases := []struct {
@@ -252,9 +295,7 @@ func TestGetTaskFunc(t *testing.T) {
 					},
 					Spec: v1beta1.TaskSpec{
 						Steps: []v1beta1.Step{{
-							Container: corev1.Container{
-								Image: "something",
-							},
+							Image: "something",
 						}},
 						Params: []v1beta1.ParamSpec{{
 							Name: "foo",
@@ -277,58 +318,7 @@ func TestGetTaskFunc(t *testing.T) {
 				},
 				Spec: v1beta1.TaskSpec{
 					Steps: []v1beta1.Step{{
-						Container: corev1.Container{
-							Image: "something",
-						},
-					}},
-					Params: []v1beta1.ParamSpec{{
-						Name: "foo",
-						Type: v1beta1.ParamTypeString,
-					}},
-				},
-			},
-			expectedKind: v1beta1.NamespacedTaskKind,
-		}, {
-			name:       "remote-v1alpha1-task-without-defaults",
-			localTasks: []runtime.Object{},
-			remoteTasks: []runtime.Object{
-				&v1alpha1.Task{
-					ObjectMeta: metav1.ObjectMeta{
-						Name:      "simple",
-						Namespace: "default",
-					},
-					TypeMeta: metav1.TypeMeta{
-						APIVersion: "tekton.dev/v1alpha1",
-						Kind:       "Task",
-					},
-					Spec: v1alpha1.TaskSpec{
-						TaskSpec: v1beta1.TaskSpec{
-							Params: []v1alpha1.ParamSpec{{
-								Name: "foo",
-							}},
-							Steps: []v1alpha1.Step{{
-								Container: corev1.Container{
-									Image: "something",
-								},
-							}},
-						},
-					},
-				},
-			},
-			ref: &v1alpha1.TaskRef{
-				Name:   "simple",
-				Bundle: u.Host + "/remote-v1alpha1-task-without-defaults",
-			},
-			expected: &v1beta1.Task{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "simple",
-					Namespace: "default",
-				},
-				Spec: v1beta1.TaskSpec{
-					Steps: []v1beta1.Step{{
-						Container: corev1.Container{
-							Image: "something",
-						},
+						Image: "something",
 					}},
 					Params: []v1beta1.ParamSpec{{
 						Name: "foo",
@@ -369,27 +359,34 @@ func TestGetTaskFunc(t *testing.T) {
 			name: "remote-cluster-task",
 			localTasks: []runtime.Object{
 				&v1beta1.ClusterTask{
-					TypeMeta:   metav1.TypeMeta{APIVersion: "v1alpha1", Kind: "ClusterTask"},
+					TypeMeta:   metav1.TypeMeta{APIVersion: "v1beta1", Kind: "ClusterTask"},
 					ObjectMeta: metav1.ObjectMeta{Name: "simple"},
 					Spec:       v1beta1.TaskSpec{Params: []v1beta1.ParamSpec{{Name: "foo"}}},
 				},
 			},
 			remoteTasks: []runtime.Object{
 				&v1beta1.ClusterTask{
-					TypeMeta:   metav1.TypeMeta{APIVersion: "tekton.dev/v1alpha1", Kind: "ClusterTask"},
+					TypeMeta:   metav1.TypeMeta{APIVersion: "tekton.dev/v1beta1", Kind: "ClusterTask"},
 					ObjectMeta: metav1.ObjectMeta{Name: "simple"},
 				},
 				&v1beta1.ClusterTask{
-					TypeMeta:   metav1.TypeMeta{APIVersion: "tekton.dev/v1alpha1", Kind: "ClusterTask"},
+					TypeMeta:   metav1.TypeMeta{APIVersion: "tekton.dev/v1beta1", Kind: "ClusterTask"},
 					ObjectMeta: metav1.ObjectMeta{Name: "dummy"},
 				},
 			},
 			ref: &v1beta1.TaskRef{
-				Name:   "simple",
-				Kind:   v1alpha1.ClusterTaskKind,
-				Bundle: u.Host + "/remote-cluster-task",
+				Name:       "simple",
+				APIVersion: "tekton.dev/v1beta1",
+				Kind:       v1beta1.ClusterTaskKind,
+				Bundle:     u.Host + "/remote-cluster-task",
 			},
-			expected:     &v1beta1.ClusterTask{ObjectMeta: metav1.ObjectMeta{Name: "simple"}},
+			expected: &v1beta1.ClusterTask{
+				ObjectMeta: metav1.ObjectMeta{Name: "simple"},
+				TypeMeta: metav1.TypeMeta{
+					APIVersion: "tekton.dev/v1beta1",
+					Kind:       "ClusterTask",
+				},
+			},
 			expectedKind: v1beta1.ClusterTaskKind,
 		}, {
 			name:       "local-cluster-task",
@@ -404,9 +401,9 @@ func TestGetTaskFunc(t *testing.T) {
 					ObjectMeta: metav1.ObjectMeta{Name: "dummy"},
 				},
 			},
-			ref: &v1alpha1.TaskRef{
+			ref: &v1beta1.TaskRef{
 				Name: "simple",
-				Kind: v1alpha1.ClusterTaskKind,
+				Kind: v1beta1.ClusterTaskKind,
 			},
 			expected:     simpleClusterTask,
 			expectedKind: v1beta1.ClusterTaskKind,
@@ -428,7 +425,13 @@ func TestGetTaskFunc(t *testing.T) {
 				t.Fatalf("failed to upload test image: %s", err.Error())
 			}
 
-			fn, err := resources.GetTaskFunc(ctx, kubeclient, tektonclient, tc.ref, "default", "default")
+			trForFunc := &v1beta1.TaskRun{
+				ObjectMeta: metav1.ObjectMeta{Name: "some-tr"},
+				Spec: v1beta1.TaskRunSpec{
+					TaskRef: tc.ref,
+				},
+			}
+			fn, err := resources.GetTaskFunc(ctx, kubeclient, tektonclient, nil, trForFunc, tc.ref, "", "default", "default")
 			if err != nil {
 				t.Fatalf("failed to get task fn: %s", err.Error())
 			}
@@ -460,9 +463,7 @@ func TestGetTaskFuncFromTaskRunSpecAlreadyFetched(t *testing.T) {
 	name := "anyname-really"
 	TaskSpec := v1beta1.TaskSpec{
 		Steps: []v1beta1.Step{{
-			Container: corev1.Container{
-				Image: "myimage",
-			},
+			Image: "myimage",
 			Script: `
 #!/usr/bin/env bash
 echo hello
@@ -491,7 +492,7 @@ echo hello
 		Spec: TaskSpec,
 	}
 
-	fn, err := resources.GetTaskFuncFromTaskRun(ctx, kubeclient, tektonclient, TaskRun)
+	fn, err := resources.GetTaskFuncFromTaskRun(ctx, kubeclient, tektonclient, nil, TaskRun)
 	if err != nil {
 		t.Fatalf("failed to get Task fn: %s", err.Error())
 	}
@@ -504,3 +505,77 @@ echo hello
 		t.Error(diff)
 	}
 }
+
+func TestGetTaskFunc_RemoteResolution(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.FromContextOrDefaults(ctx)
+	cfg.FeatureFlags.EnableAPIFields = config.AlphaAPIFields
+	ctx = config.ToContext(ctx, cfg)
+	task := parse.MustParseTask(t, taskYAMLString)
+	taskRef := &v1beta1.TaskRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}}
+	taskYAML := strings.Join([]string{
+		"kind: Task",
+		"apiVersion: tekton.dev/v1beta1",
+		taskYAMLString,
+	}, "\n")
+	resolved := test.NewResolvedResource([]byte(taskYAML), nil, nil)
+	requester := test.NewRequester(resolved, nil)
+	tr := &v1beta1.TaskRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: v1beta1.TaskRunSpec{
+			TaskRef:            taskRef,
+			ServiceAccountName: "default",
+		},
+	}
+	fn, err := resources.GetTaskFunc(ctx, nil, nil, requester, tr, tr.Spec.TaskRef, "", "default", "default")
+	if err != nil {
+		t.Fatalf("failed to get task fn: %s", err.Error())
+	}
+
+	resolvedTask, err := fn(ctx, taskRef.Name)
+	if err != nil {
+		t.Fatalf("failed to call pipelinefn: %s", err.Error())
+	}
+
+	if d := cmp.Diff(task, resolvedTask); d != "" {
+		t.Error(d)
+	}
+}
+
+func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.FromContextOrDefaults(ctx)
+	cfg.FeatureFlags.EnableAPIFields = config.AlphaAPIFields
+	ctx = config.ToContext(ctx, cfg)
+	taskRef := &v1beta1.TaskRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}}
+	resolvesTo := []byte("INVALID YAML")
+	resource := test.NewResolvedResource(resolvesTo, nil, nil)
+	requester := test.NewRequester(resource, nil)
+	tr := &v1beta1.TaskRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: v1beta1.TaskRunSpec{
+			TaskRef:            taskRef,
+			ServiceAccountName: "default",
+		},
+	}
+	fn, err := resources.GetTaskFunc(ctx, nil, nil, requester, tr, tr.Spec.TaskRef, "", "default", "default")
+	if err != nil {
+		t.Fatalf("failed to get pipeline fn: %s", err.Error())
+	}
+	if _, err := fn(ctx, taskRef.Name); err == nil {
+		t.Fatalf("expected error due to invalid pipeline data but saw none")
+	}
+}
+
+// This is missing the kind and apiVersion because those are added by
+// the MustParse helpers from the test package.
+var taskYAMLString = `
+metadata:
+  name: foo
+spec:
+  steps:
+  - name: step1
+    image: ubuntu
+    script: |
+      echo "hello world!"
+`

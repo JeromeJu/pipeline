@@ -18,6 +18,7 @@ package taskrun
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"fmt"
 	"net/http/httptest"
@@ -29,28 +30,26 @@ import (
 	"testing"
 	"time"
 
-	duckv1beta1 "knative.dev/pkg/apis/duck/v1beta1"
-
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
-	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 	podconvert "github.com/tektoncd/pipeline/pkg/pod"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
 	"github.com/tektoncd/pipeline/pkg/reconciler/volumeclaim"
-	"github.com/tektoncd/pipeline/pkg/workspace"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
 	eventstest "github.com/tektoncd/pipeline/test/events"
 	"github.com/tektoncd/pipeline/test/names"
+	"github.com/tektoncd/pipeline/test/parse"
+	resolutioncommon "github.com/tektoncd/resolution/pkg/common"
 	corev1 "k8s.io/api/core/v1"
-	v1 "k8s.io/api/core/v1"
 	k8sapierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -67,6 +66,7 @@ import (
 	"knative.dev/pkg/controller"
 	"knative.dev/pkg/kmeta"
 	"knative.dev/pkg/logging"
+	"knative.dev/pkg/ptr"
 
 	pkgreconciler "knative.dev/pkg/reconciler"
 	"knative.dev/pkg/system"
@@ -112,11 +112,9 @@ var (
 	cloudEventTarget2    = "https://bar"
 
 	simpleStep = v1beta1.Step{
-		Container: corev1.Container{
-			Name:    "simple-step",
-			Image:   "foo",
-			Command: []string{"/mycmd"},
-		},
+		Name:    "simple-step",
+		Image:   "foo",
+		Command: []string{"/mycmd"},
 	}
 	simpleTask = &v1beta1.Task{
 		ObjectMeta: objectMeta("test-task", "foo"),
@@ -134,57 +132,6 @@ var (
 			Steps: []v1beta1.Step{simpleStep},
 		},
 	}
-	taskMultipleSteps = &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-multi-steps", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{
-				{
-					Container: corev1.Container{
-						Image:   "foo",
-						Name:    "z-step",
-						Command: []string{"/mycmd"},
-					},
-				},
-				{
-					Container: corev1.Container{
-						Image:   "foo",
-						Name:    "v-step",
-						Command: []string{"/mycmd"},
-					},
-				},
-				{
-					Container: corev1.Container{
-						Image:   "foo",
-						Name:    "x-step",
-						Command: []string{"/mycmd"},
-					},
-				},
-			},
-		},
-	}
-
-	taskMultipleStepsIgnoreError = &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-multi-steps-with-ignore-error", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{
-				{
-					Container: corev1.Container{
-						Image:   "foo",
-						Name:    "step-0",
-						Command: []string{"/mycmd"},
-					},
-					OnError: "continue",
-				},
-				{
-					Container: corev1.Container{
-						Image:   "foo",
-						Name:    "step-1",
-						Command: []string{"/mycmd"},
-					},
-				},
-			},
-		},
-	}
 
 	clustertask = &v1beta1.ClusterTask{
 		ObjectMeta: metav1.ObjectMeta{Name: "test-cluster-task"},
@@ -196,10 +143,8 @@ var (
 		ObjectMeta: objectMeta("test-task-sidecar", "foo"),
 		Spec: v1beta1.TaskSpec{
 			Sidecars: []v1beta1.Sidecar{{
-				Container: corev1.Container{
-					Name:  "sidecar",
-					Image: "image-id",
-				},
+				Name:  "sidecar",
+				Image: "image-id",
 			}},
 		},
 	}
@@ -208,16 +153,12 @@ var (
 		Spec: v1beta1.TaskSpec{
 			Sidecars: []v1beta1.Sidecar{
 				{
-					Container: corev1.Container{
-						Name:  "sidecar",
-						Image: "image-id",
-					},
+					Name:  "sidecar",
+					Image: "image-id",
 				},
 				{
-					Container: corev1.Container{
-						Name:  "sidecar2",
-						Image: "image-id",
-					},
+					Name:  "sidecar2",
+					Image: "image-id",
 				},
 			},
 		},
@@ -256,11 +197,9 @@ var (
 		ObjectMeta: objectMeta("test-with-sa", "foo"),
 		Spec: v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Name:    "sa-step",
-					Image:   "foo",
-					Command: []string{"/mycmd"},
-				},
+				Name:    "sa-step",
+				Image:   "foo",
+				Command: []string{"/mycmd"},
 			}},
 		},
 	}
@@ -304,27 +243,23 @@ var (
 			},
 			Steps: []v1beta1.Step{
 				{
-					Container: corev1.Container{
-						Image:   "myimage",
-						Name:    "mycontainer",
-						Command: []string{"/mycmd"},
-						Args: []string{
-							"--my-arg=$(inputs.params.myarg)",
-							"--my-arg-with-default=$(inputs.params.myarghasdefault)",
-							"--my-arg-with-default2=$(inputs.params.myarghasdefault2)",
-							"--my-additional-arg=$(outputs.resources.myimage.url)",
-							"--my-taskname-arg=$(context.task.name)",
-							"--my-taskrun-arg=$(context.taskRun.name)",
-						},
+					Image:   "myimage",
+					Name:    "mycontainer",
+					Command: []string{"/mycmd"},
+					Args: []string{
+						"--my-arg=$(inputs.params.myarg)",
+						"--my-arg-with-default=$(inputs.params.myarghasdefault)",
+						"--my-arg-with-default2=$(inputs.params.myarghasdefault2)",
+						"--my-additional-arg=$(outputs.resources.myimage.url)",
+						"--my-taskname-arg=$(context.task.name)",
+						"--my-taskrun-arg=$(context.taskRun.name)",
 					},
 				},
 				{
-					Container: corev1.Container{
-						Image:   "myotherimage",
-						Name:    "myothercontainer",
-						Command: []string{"/mycmd"},
-						Args:    []string{"--my-other-arg=$(inputs.resources.workspace.url)"},
-					},
+					Image:   "myotherimage",
+					Name:    "myothercontainer",
+					Command: []string{"/mycmd"},
+					Args:    []string{"--my-other-arg=$(inputs.resources.workspace.url)"},
 				},
 			},
 			Volumes: []corev1.Volume{{
@@ -420,6 +355,10 @@ var (
 			EmptyDir: &corev1.EmptyDirVolumeSource{},
 		},
 	}
+	internalStepsMount = corev1.VolumeMount{
+		Name:      "tekton-internal-steps",
+		MountPath: pipeline.StepsDir,
+	}
 
 	workspaceVolume = corev1.Volume{
 		Name: "tekton-internal-workspace",
@@ -459,18 +398,24 @@ var (
 		},
 	}
 
-	placeToolsInitContainer = corev1.Container{
-		Command: []string{"/ko-app/entrypoint", "cp", "/ko-app/entrypoint", entrypointLocation},
+	fakeVersion                string
+	gitResourceSecurityContext = &corev1.SecurityContext{
+		RunAsUser: ptr.Int64(0),
+	}
+)
+
+func placeToolsInitContainer(steps []string) corev1.Container {
+	return corev1.Container{
+		Command: append([]string{"/ko-app/entrypoint", "init", "/ko-app/entrypoint", entrypointLocation}, steps...),
 		VolumeMounts: []corev1.VolumeMount{{
 			MountPath: "/tekton/bin",
 			Name:      "tekton-internal-bin",
-		}},
+		}, internalStepsMount},
 		WorkingDir: "/",
-		Name:       "place-tools",
+		Name:       "prepare",
 		Image:      "override-with-entrypoint:latest",
 	}
-	fakeVersion string
-)
+}
 
 var testClock = clock.NewFakePassiveClock(now)
 
@@ -593,25 +538,25 @@ func initializeTaskRunControllerAssets(t *testing.T, d test.Data, opts pipeline.
 }
 
 func TestReconcile_ExplicitDefaultSA(t *testing.T) {
-	taskRunSuccess := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       simpleTask.Name,
-				APIVersion: "a1",
-			},
-		},
-	}
-	taskRunWithSaSuccess := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-sa-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       saTask.Name,
-				APIVersion: "a1",
-			},
-			ServiceAccountName: "test-sa",
-		},
-	}
+	taskRunSuccess := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-success
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task
+`)
+	taskRunWithSaSuccess := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-sa-run-success
+  namespace: foo
+spec:
+  serviceAccountName: test-sa
+  taskRef:
+    apiVersion: a1
+    name: test-with-sa
+`)
 	taskruns := []*v1beta1.TaskRun{taskRunSuccess, taskRunWithSaSuccess}
 	defaultSAName := "pipelines"
 	d := test.Data{
@@ -712,31 +657,29 @@ func TestReconcile_ExplicitDefaultSA(t *testing.T) {
 // TestReconcile_CloudEvents runs reconcile with a cloud event sink configured
 // to ensure that events are sent in different cases
 func TestReconcile_CloudEvents(t *testing.T) {
-	task := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "foo",
-					Name:    "simple-step",
-					Command: []string{"/mycmd"},
-					Env: []corev1.EnvVar{{
-						Name:  "foo",
-						Value: "bar",
-					}},
-				},
-			}},
-		},
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-not-started", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: task.Name,
-			},
-		},
-	}
-	taskRun.ObjectMeta.SelfLink = "/test/taskrun1"
+	task := parse.MustParseTask(t, `
+metadata:
+  name: test-task
+  namespace: foo
+spec:
+  steps:
+  - command:
+    - /mycmd
+    env:
+    - name: foo
+      value: bar
+    image: foo
+    name: simple-step
+`)
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-not-started
+  namespace: foo
+  selfLink: /test/taskrun1
+spec:
+  taskRef:
+    name: test-task
+`)
 	d := test.Data{
 		Tasks:    []*v1beta1.Task{task},
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
@@ -807,245 +750,193 @@ func TestReconcile_CloudEvents(t *testing.T) {
 }
 
 func TestReconcile(t *testing.T) {
-	taskRunSuccess := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       simpleTask.Name,
-				APIVersion: "a1",
-			},
-		},
-	}
-	taskRunWithSaSuccess := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-sa-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       saTask.Name,
-				APIVersion: "a1",
-			},
-			ServiceAccountName: "test-sa",
-		},
-	}
-	taskRunSubstitution := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-substitution", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       templatedTask.Name,
-				APIVersion: "a1",
-			},
-			Params: []v1beta1.Param{
-				{
-					Name:  "myarg",
-					Value: *v1beta1.NewArrayOrString("foo"),
-				},
-				{
-					Name:  "myarghasdefault",
-					Value: *v1beta1.NewArrayOrString("bar"),
-				},
-				{
-					Name:  "configmapname",
-					Value: *v1beta1.NewArrayOrString("configbar"),
-				},
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Inputs: []v1beta1.TaskResourceBinding{{
-					PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-						Name: "workspace",
-						ResourceRef: &v1beta1.PipelineResourceRef{
-							Name: gitResource.Name,
-						},
-					},
-				}},
-				Outputs: []v1beta1.TaskResourceBinding{{
-					PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-						Name: "myimage",
-						ResourceRef: &v1beta1.PipelineResourceRef{
-							Name: imageResource.Name,
-						},
-					},
-				}},
-			},
-		},
-	}
-	taskRunInputOutput := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-input-output", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: outputTask.Name,
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Inputs: []v1beta1.TaskResourceBinding{
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name:        gitResource.Name,
-							ResourceRef: &v1beta1.PipelineResourceRef{Name: gitResource.Name},
-						},
-						Paths: []string{"source-folder"},
-					},
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name:        anotherGitResource.Name,
-							ResourceRef: &v1beta1.PipelineResourceRef{Name: anotherGitResource.Name},
-						},
-						Paths: []string{"source-folder"},
-					},
-				},
-				Outputs: []v1beta1.TaskResourceBinding{{
-					PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-						Name:        gitResource.Name,
-						ResourceRef: &v1beta1.PipelineResourceRef{Name: gitResource.Name},
-					},
-					Paths: []string{"output-folder"},
-				}},
-			},
-		},
-	}
-	taskRunInputOutput.OwnerReferences = []metav1.OwnerReference{{
-		Kind: "PipelineRun",
-		Name: "test",
-	}}
-	taskRunWithTaskSpec := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-taskspec", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			Params: []v1beta1.Param{{
-				Name:  "myarg",
-				Value: *v1beta1.NewArrayOrString("foo"),
-			}},
-			Resources: &v1beta1.TaskRunResources{
-				Inputs: []v1beta1.TaskResourceBinding{{
-					PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-						Name:        "workspace",
-						ResourceRef: &v1beta1.PipelineResourceRef{Name: gitResource.Name},
-					},
-				}},
-			},
-			TaskSpec: &v1beta1.TaskSpec{
-				Params: []v1beta1.ParamSpec{{
-					Name:    "myarg",
-					Type:    v1beta1.ParamTypeString,
-					Default: v1beta1.NewArrayOrString("mydefault"),
-				}},
-				Resources: &v1beta1.TaskResources{
-					Inputs: []v1beta1.TaskResource{{
-						ResourceDeclaration: v1beta1.ResourceDeclaration{
-							Name: "workspace",
-							Type: resourcev1alpha1.PipelineResourceTypeGit,
-						},
-					}},
-				},
-				Steps: []v1beta1.Step{{
-					Container: corev1.Container{
-						Image:   "myimage",
-						Name:    "mycontainer",
-						Command: []string{"/mycmd"},
-						Args:    []string{"--my-arg=$(inputs.params.myarg)"},
-					},
-				}},
-			},
-		},
-	}
+	taskRunSuccess := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-success
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task
+`)
+	taskRunWithSaSuccess := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-sa-run-success
+  namespace: foo
+spec:
+  serviceAccountName: test-sa
+  taskRef:
+    apiVersion: a1
+    name: test-with-sa
+`)
+	taskRunSubstitution := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-substitution
+  namespace: foo
+spec:
+  params:
+  - name: myarg
+    value: foo
+  - name: myarghasdefault
+    value: bar
+  - name: configmapname
+    value: configbar
+  resources:
+    inputs:
+    - name: workspace
+      resourceRef:
+        name: git-resource
+    outputs:
+    - name: myimage
+      resourceRef:
+        name: image-resource
+  taskRef:
+    apiVersion: a1
+    name: test-task-with-substitution
+`)
+	taskRunInputOutput := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-input-output
+  namespace: foo
+  ownerReferences:
+  - kind: PipelineRun
+    name: test
+spec:
+  resources:
+    inputs:
+    - name: git-resource
+      paths:
+      - source-folder
+      resourceRef:
+        name: git-resource
+    - name: another-git-resource
+      paths:
+      - source-folder
+      resourceRef:
+        name: another-git-resource
+    outputs:
+    - name: git-resource
+      paths:
+      - output-folder
+      resourceRef:
+        name: git-resource
+  taskRef:
+    name: test-output-task
+`)
+	taskRunWithTaskSpec := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-taskspec
+  namespace: foo
+spec:
+  params:
+  - name: myarg
+    value: foo
+  resources:
+    inputs:
+    - name: workspace
+      resourceRef:
+        name: git-resource
+  taskSpec:
+    params:
+    - default: mydefault
+      name: myarg
+      type: string
+    resources:
+      inputs:
+      - name: workspace
+        type: git
+    steps:
+    - args:
+      - --my-arg=$(inputs.params.myarg)
+      command:
+      - /mycmd
+      image: myimage
+      name: mycontainer
+`)
 
-	taskRunWithResourceSpecAndTaskSpec := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-resource-spec", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			Resources: &v1beta1.TaskRunResources{
-				Inputs: []v1beta1.TaskResourceBinding{{
-					PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-						Name: "workspace",
-						ResourceSpec: &resourcev1alpha1.PipelineResourceSpec{
-							Type: resourcev1alpha1.PipelineResourceTypeGit,
-							Params: []resourcev1alpha1.ResourceParam{{
-								Name:  "URL",
-								Value: "github.com/foo/bar.git",
-							}, {
-								Name:  "revision",
-								Value: "rel-can",
-							}},
-						},
-					},
-				}},
-			},
-			TaskSpec: &v1beta1.TaskSpec{
-				Resources: &v1beta1.TaskResources{
-					Inputs: []v1beta1.TaskResource{{
-						ResourceDeclaration: v1beta1.ResourceDeclaration{
-							Name: "workspace",
-							Type: resourcev1alpha1.PipelineResourceTypeGit,
-						},
-					}},
-				},
-				Steps: []v1beta1.Step{{
-					Container: corev1.Container{
-						Image:   "ubuntu",
-						Name:    "mystep",
-						Command: []string{"/mycmd"},
-					},
-				}},
-			},
-		},
-	}
+	taskRunWithResourceSpecAndTaskSpec := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-resource-spec
+  namespace: foo
+spec:
+  resources:
+    inputs:
+    - name: workspace
+      resourceSpec:
+        params:
+        - name: URL
+          value: github.com/foo/bar.git
+        - name: revision
+          value: rel-can
+        type: git
+  taskSpec:
+    resources:
+      inputs:
+      - name: workspace
+        type: git
+    steps:
+    - command:
+      - /mycmd
+      image: ubuntu
+      name: mystep
+`)
 
-	taskRunWithClusterTask := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-cluster-task", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: clustertask.Name,
-				Kind: v1beta1.ClusterTaskKind,
-			},
-		},
-	}
+	taskRunWithClusterTask := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-cluster-task
+  namespace: foo
+spec:
+  taskRef:
+    kind: ClusterTask
+    name: test-cluster-task
+`)
 
-	taskRunWithLabels := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-labels", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-	}
-	taskRunWithLabels.Labels = map[string]string{
-		"TaskRunLabel":           "TaskRunValue",
-		pipeline.TaskRunLabelKey: "WillNotBeUsed",
-	}
+	taskRunWithLabels := parse.MustParseTaskRun(t, `
+metadata:
+  labels:
+    TaskRunLabel: TaskRunValue
+    tekton.dev/taskRun: WillNotBeUsed
+  name: test-taskrun-with-labels
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+`)
 
-	taskRunWithAnnotations := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-annotations", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-	}
-	taskRunWithAnnotations.Annotations = map[string]string{"TaskRunAnnotation": "TaskRunValue"}
+	taskRunWithAnnotations := parse.MustParseTaskRun(t, `
+metadata:
+  annotations:
+    TaskRunAnnotation: TaskRunValue
+  name: test-taskrun-with-annotations
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+`)
 
-	taskRunWithPod := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-pod", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				PodName: "some-pod-abcdethat-no-longer-exists",
-			},
-		},
-	}
+	taskRunWithPod := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-pod
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+status:
+  podName: some-pod-abcdethat-no-longer-exists
+`)
 
-	taskRunWithCredentialsVariable := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-with-credentials-variable", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskSpec: &v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
-					Container: corev1.Container{
-						Image:   "myimage",
-						Name:    "mycontainer",
-						Command: []string{"/mycmd $(credentials.path)"},
-					},
-				}},
-			},
-		},
-	}
+	taskRunWithCredentialsVariable := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-with-credentials-variable
+  namespace: foo
+spec:
+  taskSpec:
+    steps:
+    - command:
+      - /mycmd $(credentials.path)
+      image: myimage
+      name: mycontainer
+`)
 
 	// Set up a fake registry to push an image to.
 	s := httptest.NewServer(registry.New())
@@ -1061,15 +952,15 @@ func TestReconcile(t *testing.T) {
 		t.Fatalf("failed to upload image with simple task: %s", err.Error())
 	}
 
-	taskRunBundle := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-bundle", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:   simpleTypedTask.Name,
-				Bundle: ref,
-			},
-		},
-	}
+	taskRunBundle := parse.MustParseTaskRun(t, fmt.Sprintf(`
+metadata:
+  name: test-taskrun-bundle
+  namespace: foo
+spec:
+  taskRef:
+    bundle: %s
+    name: test-task
+`, ref))
 
 	taskruns := []*v1beta1.TaskRun{
 		taskRunSuccess, taskRunWithSaSuccess,
@@ -1147,7 +1038,8 @@ func TestReconcile(t *testing.T) {
 					"TEKTON_RESOURCE_NAME": "workspace",
 					"HOME":                 "/tekton/home",
 				},
-				workingDir: workspaceDir,
+				workingDir:      workspaceDir,
+				securityContext: gitResourceSecurityContext,
 			},
 			{
 				name:  "mycontainer",
@@ -1196,7 +1088,8 @@ func TestReconcile(t *testing.T) {
 					"TEKTON_RESOURCE_NAME": "workspace",
 					"HOME":                 "/tekton/home",
 				},
-				workingDir: workspaceDir,
+				workingDir:      workspaceDir,
+				securityContext: gitResourceSecurityContext,
 			},
 			{
 				name:  "mycontainer",
@@ -1239,7 +1132,8 @@ func TestReconcile(t *testing.T) {
 					"TEKTON_RESOURCE_NAME": "workspace",
 					"HOME":                 "/tekton/home",
 				},
-				workingDir: workspaceDir,
+				workingDir:      workspaceDir,
+				securityContext: gitResourceSecurityContext,
 			},
 			{
 				name:  "mystep",
@@ -1345,15 +1239,213 @@ func TestReconcile(t *testing.T) {
 	}
 }
 
-func TestReconcile_SetsStartTime(t *testing.T) {
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
+// TestReconcileWithResolver checks that a TaskRun with a populated Resolver
+// field creates a ResolutionRequest object for that Resolver's type, and
+// that when the request is successfully resolved the TaskRun begins running.
+func TestReconcileWithResolver(t *testing.T) {
+	resolverName := "foobar"
+	tr := parse.MustParseTaskRun(t, `
+metadata:
+  name: tr
+  namespace: default
+spec:
+  taskRef:
+    resolver: foobar
+  serviceAccountName: default
+`)
+
+	cms := []*corev1.ConfigMap{{
+		ObjectMeta: metav1.ObjectMeta{Namespace: system.Namespace(), Name: config.GetFeatureFlagsConfigName()},
+		Data: map[string]string{
+			"enable-api-fields": config.AlphaAPIFields,
 		},
+	}}
+
+	d := test.Data{
+		ConfigMaps: cms,
+		TaskRuns:   []*v1beta1.TaskRun{tr},
+		ServiceAccounts: []*corev1.ServiceAccount{{
+			ObjectMeta: metav1.ObjectMeta{Name: tr.Spec.ServiceAccountName, Namespace: "foo"},
+		}},
 	}
+
+	testAssets, cancel := getTaskRunController(t, d)
+	defer cancel()
+	c := testAssets.Controller
+	clients := testAssets.Clients
+	saName := "default"
+	if _, err := clients.Kube.CoreV1().ServiceAccounts(tr.Namespace).Create(testAssets.Ctx, &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saName,
+			Namespace: tr.Namespace,
+		},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr)); err == nil {
+		t.Error("Wanted a resource request in progress error, but got nil.")
+	} else if controller.IsPermanentError(err) {
+		t.Errorf("expected no error. Got error %v", err)
+	}
+
+	client := testAssets.Clients.ResolutionRequests.ResolutionV1alpha1().ResolutionRequests("default")
+	resolutionrequests, err := client.List(testAssets.Ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error listing resource requests: %v", err)
+	}
+	numResolutionRequests := len(resolutionrequests.Items)
+	if numResolutionRequests != 1 {
+		t.Fatalf("expected exactly 1 resource request but found %d", numResolutionRequests)
+	}
+
+	resreq := &resolutionrequests.Items[0]
+	resolutionRequestType := resreq.ObjectMeta.Labels["resolution.tekton.dev/type"]
+	if resolutionRequestType != resolverName {
+		t.Fatalf("expected resource request type %q but saw %q", resolutionRequestType, resolverName)
+	}
+
+	// Mock a successful resolution
+	var taskBytes = []byte(`
+          kind: Task
+          apiVersion: tekton.dev/v1beta1
+          metadata:
+            name: foo
+          spec:
+            steps:
+            - name: step1
+              image: ubuntu
+              script: |
+                echo "hello world!"
+        `)
+	resreq.Status.ResolutionRequestStatusFields.Data = base64.StdEncoding.Strict().EncodeToString(taskBytes)
+	resreq.Status.MarkSucceeded()
+	resreq, err = client.UpdateStatus(testAssets.Ctx, resreq, metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error updating resource request with resolved task data: %v", err)
+	}
+
+	// Check that the resolved task was recognized by the
+	// TaskRun reconciler and that the TaskRun has now
+	// started executing.
+	if err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr)); err != nil {
+		if ok, _ := controller.IsRequeueKey(err); !ok {
+			t.Errorf("expected no error. Got error %v", err)
+		}
+	}
+
+	updatedTR, err := clients.Pipeline.TektonV1beta1().TaskRuns(tr.Namespace).Get(testAssets.Ctx, tr.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("getting updated taskrun: %v", err)
+	}
+	condition := updatedTR.Status.GetCondition(apis.ConditionSucceeded)
+	if condition == nil || condition.Status != corev1.ConditionUnknown {
+		t.Errorf("Expected fresh TaskRun to have in progress status, but had %v", condition)
+	}
+	if condition != nil && condition.Reason != v1beta1.TaskRunReasonRunning.String() {
+		t.Errorf("Expected reason %q but was %s", v1beta1.TaskRunReasonRunning.String(), condition.Reason)
+	}
+}
+
+// TestReconcileWithFailingResolver checks that a TaskRun with a failing Resolver
+// field creates a ResolutionRequest object for that Resolver's type, and
+// that when the request fails, the TaskRun fails.
+func TestReconcileWithFailingResolver(t *testing.T) {
+	resolverName := "foobar"
+	tr := parse.MustParseTaskRun(t, `
+metadata:
+  name: tr
+  namespace: default
+spec:
+  taskRef:
+    resolver: foobar
+  serviceAccountName: default
+`)
+
+	cms := []*corev1.ConfigMap{{
+		ObjectMeta: metav1.ObjectMeta{Namespace: system.Namespace(), Name: config.GetFeatureFlagsConfigName()},
+		Data: map[string]string{
+			"enable-api-fields": config.AlphaAPIFields,
+		},
+	}}
+
+	d := test.Data{
+		ConfigMaps: cms,
+		TaskRuns:   []*v1beta1.TaskRun{tr},
+		ServiceAccounts: []*corev1.ServiceAccount{{
+			ObjectMeta: metav1.ObjectMeta{Name: tr.Spec.ServiceAccountName, Namespace: "foo"},
+		}},
+	}
+
+	testAssets, cancel := getTaskRunController(t, d)
+	defer cancel()
+	c := testAssets.Controller
+	clients := testAssets.Clients
+	saName := "default"
+	if _, err := clients.Kube.CoreV1().ServiceAccounts(tr.Namespace).Create(testAssets.Ctx, &corev1.ServiceAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      saName,
+			Namespace: tr.Namespace,
+		},
+	}, metav1.CreateOptions{}); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr)); err == nil {
+		t.Error("Wanted a resource request in progress error, but got nil.")
+	} else if controller.IsPermanentError(err) {
+		t.Errorf("expected no error. Got error %v", err)
+	}
+
+	client := testAssets.Clients.ResolutionRequests.ResolutionV1alpha1().ResolutionRequests("default")
+	resolutionrequests, err := client.List(testAssets.Ctx, metav1.ListOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error listing resource requests: %v", err)
+	}
+	numResolutionRequests := len(resolutionrequests.Items)
+	if numResolutionRequests != 1 {
+		t.Fatalf("expected exactly 1 resource request but found %d", numResolutionRequests)
+	}
+
+	resreq := &resolutionrequests.Items[0]
+	resolutionRequestType := resreq.ObjectMeta.Labels["resolution.tekton.dev/type"]
+	if resolutionRequestType != resolverName {
+		t.Fatalf("expected resource request type %q but saw %q", resolutionRequestType, resolverName)
+	}
+
+	resreq.Status.MarkFailed(resolutioncommon.ReasonResolutionTimedOut, "resolution took longer than global timeout of 1 minute")
+	resreq, err = client.UpdateStatus(testAssets.Ctx, resreq, metav1.UpdateOptions{})
+	if err != nil {
+		t.Fatalf("unexpected error updating resource request with resolved pipeline data: %v", err)
+	}
+
+	// Check that the TaskRun fails.
+	if err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(tr)); err == nil {
+		t.Fatalf("expected an error")
+	}
+
+	updatedTR, err := clients.Pipeline.TektonV1beta1().TaskRuns(tr.Namespace).Get(testAssets.Ctx, tr.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("getting updated taskrun: %v", err)
+	}
+	condition := updatedTR.Status.GetCondition(apis.ConditionSucceeded)
+	if condition == nil || condition.Status != corev1.ConditionFalse {
+		t.Errorf("Expected fresh TaskRun to have failed, but had %v", condition)
+	}
+	if condition != nil && condition.Reason != podconvert.ReasonFailedResolution {
+		t.Errorf("Expected reason %q but was %s", podconvert.ReasonFailedResolution, condition.Reason)
+	}
+}
+
+func TestReconcile_SetsStartTime(t *testing.T) {
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+`)
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -1379,20 +1471,17 @@ func TestReconcile_SetsStartTime(t *testing.T) {
 
 func TestReconcile_DoesntChangeStartTime(t *testing.T) {
 	startTime := time.Date(2000, 1, 1, 1, 1, 1, 1, time.UTC)
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				StartTime: &metav1.Time{Time: startTime},
-				PodName:   "the-pod",
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+status:
+  podName: the-pod
+`)
+	taskRun.Status.StartTime = &metav1.Time{Time: startTime}
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -1416,23 +1505,23 @@ func TestReconcile_DoesntChangeStartTime(t *testing.T) {
 }
 
 func TestReconcileInvalidTaskRuns(t *testing.T) {
-	noTaskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("notaskrun", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: "notask",
-			},
-		},
-	}
-	withWrongRef := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("taskrun-with-wrong-ref", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: "taskrun-with-wrong-ref",
-				Kind: v1beta1.ClusterTaskKind,
-			},
-		},
-	}
+	noTaskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: notaskrun
+  namespace: foo
+spec:
+  taskRef:
+    name: notask
+`)
+	withWrongRef := parse.MustParseTaskRun(t, `
+metadata:
+  name: taskrun-with-wrong-ref
+  namespace: foo
+spec:
+  taskRef:
+    kind: ClusterTask
+    name: taskrun-with-wrong-ref
+`)
 	taskRuns := []*v1beta1.TaskRun{noTaskRun, withWrongRef}
 	tasks := []*v1beta1.Task{simpleTask}
 
@@ -1513,14 +1602,14 @@ func TestReconcileInvalidTaskRuns(t *testing.T) {
 }
 
 func TestReconcileGetTaskError(t *testing.T) {
-	tr := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-	}
+	tr := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-success
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+`)
 	d := test.Data{
 		TaskRuns:          []*v1beta1.TaskRun{tr},
 		Tasks:             []*v1beta1.Task{simpleTask},
@@ -1563,29 +1652,22 @@ func TestReconcileGetTaskError(t *testing.T) {
 }
 
 func TestReconcileTaskRunWithPermanentError(t *testing.T) {
-	noTaskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("notaskrun", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: "notask",
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:    apis.ConditionSucceeded,
-						Status:  corev1.ConditionFalse,
-						Reason:  podconvert.ReasonFailedResolution,
-						Message: "error when listing tasks for taskRun taskrun-failure: tasks.tekton.dev \"notask\" not found",
-					},
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				StartTime: &metav1.Time{Time: now},
-			},
-		},
-	}
+	noTaskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: notaskrun
+  namespace: foo
+spec:
+  taskRef:
+    name: notask
+status:
+  conditions:
+  - message: 'error when listing tasks for taskRun taskrun-failure: tasks.tekton.dev
+      "notask" not found'
+    reason: TaskRunResolutionFailed
+    status: "False"
+    type: Succeeded
+  startTime: "2022-01-01T00:00:00Z"
+`)
 
 	taskRuns := []*v1beta1.TaskRun{noTaskRun}
 	d := test.Data{
@@ -1628,19 +1710,16 @@ func TestReconcileTaskRunWithPermanentError(t *testing.T) {
 }
 
 func TestReconcilePodFetchError(t *testing.T) {
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: "test-task",
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				PodName: "will-not-be-found",
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-success
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+status:
+  podName: will-not-be-found
+`)
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -1690,23 +1769,20 @@ func makePod(taskRun *v1beta1.TaskRun, task *v1beta1.Task) (*corev1.Pod, error) 
 
 func TestReconcilePodUpdateStatus(t *testing.T) {
 	const taskLabel = "test-task"
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: taskLabel,
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-success
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+status:
+  podName: test-taskrun-run-success-pod
+`)
 
 	pod, err := makePod(taskRun, simpleTask)
 	if err != nil {
 		t.Fatalf("MakePod: %v", err)
-	}
-	taskRun.Status = v1beta1.TaskRunStatus{
-		TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-			PodName: pod.Name,
-		},
 	}
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
@@ -1788,30 +1864,21 @@ func TestReconcilePodUpdateStatus(t *testing.T) {
 }
 
 func TestReconcileOnCompletedTaskRun(t *testing.T) {
-	taskSt := &apis.Condition{
-		Type:    apis.ConditionSucceeded,
-		Status:  corev1.ConditionTrue,
-		Reason:  "Build succeeded",
-		Message: "Build succeeded",
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-success", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					*taskSt,
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				StartTime: &metav1.Time{Time: now.Add(-15 * time.Second)},
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-success
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - message: Build succeeded
+    reason: Build succeeded
+    status: "True"
+    type: Succeeded
+  startTime: "2021-12-31T23:59:45Z"
+`)
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{
 			taskRun,
@@ -1831,36 +1898,30 @@ func TestReconcileOnCompletedTaskRun(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Expected completed TaskRun %s to exist but instead got error when getting it: %v", taskRun.Name, err)
 	}
-	if d := cmp.Diff(taskSt, newTr.Status.GetCondition(apis.ConditionSucceeded), ignoreLastTransitionTime); d != "" {
+	if d := cmp.Diff(taskRun.Status.GetCondition(apis.ConditionSucceeded), newTr.Status.GetCondition(apis.ConditionSucceeded), ignoreLastTransitionTime); d != "" {
 		t.Fatalf("Did not get expected condition %s", diff.PrintWantGot(d))
 	}
 }
 
 func TestReconcileOnCancelledTaskRun(t *testing.T) {
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-run-cancelled", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-			Status: v1beta1.TaskRunSpecStatusCancelled,
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionUnknown,
-					},
-				},
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-cancelled
+  namespace: foo
+spec:
+  status: TaskRunCancelled
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  podName: test-taskrun-run-cancelled-pod
+`)
 	pod, err := makePod(taskRun, simpleTask)
 	if err != nil {
 		t.Fatalf("MakePod: %v", err)
 	}
-	taskRun.Status.PodName = pod.Name
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -1914,6 +1975,133 @@ func TestReconcileOnCancelledTaskRun(t *testing.T) {
 	}
 }
 
+func TestReconcilePodFailuresStepImagePullFailed(t *testing.T) {
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-imagepull-fail
+  namespace: foo
+spec:
+  taskSpec:
+    steps:
+    - image: whatever
+status:
+  steps:
+  - container: step-unnamed-0
+    name: unnamed-0
+    waiting:
+      message: Back-off pulling image "whatever"
+      reason: ImagePullBackOff
+  taskSpec:
+    steps:
+    - image: whatever
+`)
+	expectedStatus := &apis.Condition{
+		Type:    apis.ConditionSucceeded,
+		Status:  corev1.ConditionFalse,
+		Reason:  "TaskRunImagePullFailed",
+		Message: `The step "unnamed-0" in TaskRun "test-imagepull-fail" failed to pull the image "whatever". The pod errored with the message: "Back-off pulling image "whatever"."`,
+	}
+
+	wantEvents := []string{
+		"Normal Started ",
+		`Warning Failed The step "unnamed-0" in TaskRun "test-imagepull-fail" failed to pull the image "whatever". The pod errored with the message: "Back-off pulling image "whatever".`,
+	}
+	d := test.Data{
+		TaskRuns: []*v1beta1.TaskRun{taskRun},
+	}
+	testAssets, cancel := getTaskRunController(t, d)
+	defer cancel()
+	c := testAssets.Controller
+	clients := testAssets.Clients
+
+	if err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(taskRun)); err != nil {
+		t.Fatalf("Unexpected error when reconciling completed TaskRun : %v", err)
+	}
+	newTr, err := clients.Pipeline.TektonV1beta1().TaskRuns(taskRun.Namespace).Get(testAssets.Ctx, taskRun.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected completed TaskRun %s to exist but instead got error when getting it: %v", taskRun.Name, err)
+	}
+	condition := newTr.Status.GetCondition(apis.ConditionSucceeded)
+	if d := cmp.Diff(expectedStatus, condition, ignoreLastTransitionTime); d != "" {
+		t.Fatalf("Did not get expected condition %s", diff.PrintWantGot(d))
+	}
+	err = eventstest.CheckEventsOrdered(t, testAssets.Recorder.Events, taskRun.Name, wantEvents)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+}
+
+func TestReconcilePodFailuresSidecarImagePullFailed(t *testing.T) {
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-imagepull-fail
+  namespace: foo
+spec:
+  taskSpec:
+    sidecars:
+    - image: ubuntu
+    - image: whatever
+    steps:
+    - image: alpine
+status:
+  sidecars:
+  - container: step-unnamed-0
+    name: unnamed-0
+    running:
+      startedAt: "2022-06-09T10:13:41Z"
+  - container: step-unnamed-1
+    name: unnamed-1
+    waiting:
+      message: Back-off pulling image "whatever"
+      reason: ImagePullBackOff
+  steps:
+  - container: step-unnamed-2
+    name: unnamed-2
+    running:
+      startedAt: "2022-06-09T10:13:41Z"
+  taskSpec:
+    sidecars:
+    - image: ubuntu
+    - image: whatever
+    steps:
+    - image: alpine
+`)
+	expectedStatus := &apis.Condition{
+		Type:    apis.ConditionSucceeded,
+		Status:  corev1.ConditionFalse,
+		Reason:  "TaskRunImagePullFailed",
+		Message: `The sidecar "unnamed-1" in TaskRun "test-imagepull-fail" failed to pull the image "whatever". The pod errored with the message: "Back-off pulling image "whatever"."`,
+	}
+
+	wantEvents := []string{
+		"Normal Started ",
+		`Warning Failed The sidecar "unnamed-1" in TaskRun "test-imagepull-fail" failed to pull the image "whatever". The pod errored with the message: "Back-off pulling image "whatever".`,
+	}
+	d := test.Data{
+		TaskRuns: []*v1beta1.TaskRun{taskRun},
+	}
+	testAssets, cancel := getTaskRunController(t, d)
+	defer cancel()
+	c := testAssets.Controller
+	clients := testAssets.Clients
+
+	if err := c.Reconciler.Reconcile(testAssets.Ctx, getRunName(taskRun)); err != nil {
+		t.Fatalf("Unexpected error when reconciling completed TaskRun : %v", err)
+	}
+	newTr, err := clients.Pipeline.TektonV1beta1().TaskRuns(taskRun.Namespace).Get(testAssets.Ctx, taskRun.Name, metav1.GetOptions{})
+	if err != nil {
+		t.Fatalf("Expected completed TaskRun %s to exist but instead got error when getting it: %v", taskRun.Name, err)
+	}
+	condition := newTr.Status.GetCondition(apis.ConditionSucceeded)
+	if d := cmp.Diff(expectedStatus, condition, ignoreLastTransitionTime); d != "" {
+		t.Fatalf("Did not get expected condition %s", diff.PrintWantGot(d))
+	}
+	err = eventstest.CheckEventsOrdered(t, testAssets.Recorder.Events, taskRun.Name, wantEvents)
+	if err != nil {
+		t.Errorf(err.Error())
+	}
+}
+
 func TestReconcileTimeouts(t *testing.T) {
 	type testCase struct {
 		name           string
@@ -1925,28 +2113,20 @@ func TestReconcileTimeouts(t *testing.T) {
 	testcases := []testCase{
 		{
 			name: "taskrun with timeout",
-			taskRun: &v1beta1.TaskRun{
-				ObjectMeta: objectMeta("test-taskrun-timeout", "foo"),
-				Spec: v1beta1.TaskRunSpec{
-					TaskRef: &v1beta1.TaskRef{
-						Name: simpleTask.Name,
-					},
-					Timeout: &metav1.Duration{Duration: 10 * time.Second},
-				},
-				Status: v1beta1.TaskRunStatus{
-					Status: duckv1beta1.Status{
-						Conditions: duckv1beta1.Conditions{
-							apis.Condition{
-								Type:   apis.ConditionSucceeded,
-								Status: corev1.ConditionUnknown,
-							},
-						},
-					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						StartTime: &metav1.Time{Time: now.Add(-15 * time.Second)},
-					},
-				},
-			},
+			taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-timeout
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+  timeout: 10s
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  startTime: "2021-12-31T23:59:45Z"
+`),
 
 			expectedStatus: &apis.Condition{
 				Type:    apis.ConditionSucceeded,
@@ -1959,27 +2139,19 @@ func TestReconcileTimeouts(t *testing.T) {
 			},
 		}, {
 			name: "taskrun with default timeout",
-			taskRun: &v1beta1.TaskRun{
-				ObjectMeta: objectMeta("test-taskrun-default-timeout-60-minutes", "foo"),
-				Spec: v1beta1.TaskRunSpec{
-					TaskRef: &v1beta1.TaskRef{
-						Name: simpleTask.Name,
-					},
-				},
-				Status: v1beta1.TaskRunStatus{
-					Status: duckv1beta1.Status{
-						Conditions: duckv1beta1.Conditions{
-							apis.Condition{
-								Type:   apis.ConditionSucceeded,
-								Status: corev1.ConditionUnknown,
-							},
-						},
-					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						StartTime: &metav1.Time{Time: now.Add(-61 * time.Minute)},
-					},
-				},
-			},
+			taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-default-timeout-60-minutes
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  startTime: "2021-12-31T22:59:00Z"
+`),
 			expectedStatus: &apis.Condition{
 				Type:    apis.ConditionSucceeded,
 				Status:  corev1.ConditionFalse,
@@ -1991,28 +2163,20 @@ func TestReconcileTimeouts(t *testing.T) {
 			},
 		}, {
 			name: "task run with nil timeout uses default",
-			taskRun: &v1beta1.TaskRun{
-				ObjectMeta: objectMeta("test-taskrun-nil-timeout-default-60-minutes", "foo"),
-				Spec: v1beta1.TaskRunSpec{
-					TaskRef: &v1beta1.TaskRef{
-						Name: simpleTask.Name,
-					},
-					Timeout: nil,
-				},
-				Status: v1beta1.TaskRunStatus{
-					Status: duckv1beta1.Status{
-						Conditions: duckv1beta1.Conditions{
-							apis.Condition{
-								Type:   apis.ConditionSucceeded,
-								Status: corev1.ConditionUnknown,
-							},
-						},
-					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						StartTime: &metav1.Time{Time: now.Add(-61 * time.Minute)},
-					},
-				},
-			},
+			taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-nil-timeout-default-60-minutes
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+  timeout: null
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  startTime: "2021-12-31T22:59:00Z"
+`),
 
 			expectedStatus: &apis.Condition{
 				Type:    apis.ConditionSucceeded,
@@ -2059,52 +2223,44 @@ func TestExpandMountPath(t *testing.T) {
 	expectedMountPath := "/temppath/replaced"
 	expectedReplacedArgs := fmt.Sprintf("replacedArgs - %s", expectedMountPath)
 	// The task's Workspace has a parameter variable
-	simpleTask := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{{
-				Name:        "tr-workspace",
-				Description: "a test task workspace",
-				MountPath:   "/temppath/$(params.source-path)",
-				ReadOnly:    true,
-			}},
-			Params: []v1beta1.ParamSpec{
-				{
-					Name: "source-path",
-					Type: v1beta1.ParamTypeString,
-				},
-				{
-					Name: "source-path-two",
-					Type: v1beta1.ParamTypeString,
-				},
-			},
-			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "foo",
-					Name:    "simple-step",
-					Command: []string{"echo"},
-					Args:    []string{"replacedArgs - $(workspaces.tr-workspace.path)"},
-				},
-			}},
-		},
-	}
+	simpleTask := parse.MustParseTask(t, `
+metadata:
+  name: test-task
+  namespace: foo
+spec:
+  params:
+  - name: source-path
+    type: string
+  - name: source-path-two
+    type: string
+  steps:
+  - args:
+    - replacedArgs - $(workspaces.tr-workspace.path)
+    command:
+    - echo
+    image: foo
+    name: simple-step
+  workspaces:
+  - description: a test task workspace
+    mountPath: /temppath/$(params.source-path)
+    name: tr-workspace
+    readOnly: true
+`)
 
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-not-started", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-			Workspaces: []v1beta1.WorkspaceBinding{{
-				Name:     "tr-workspace",
-				EmptyDir: &corev1.EmptyDirVolumeSource{},
-			}},
-			Params: []v1beta1.Param{{
-				Name:  "source-path",
-				Value: *v1beta1.NewArrayOrString("replaced"),
-			}},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-not-started
+  namespace: foo
+spec:
+  params:
+  - name: source-path
+    value: replaced
+  taskRef:
+    name: test-task
+  workspaces:
+  - emptyDir: {}
+    name: tr-workspace
+`)
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -2141,8 +2297,8 @@ func TestExpandMountPath(t *testing.T) {
 		Kind:     "Task",
 		TaskSpec: &v1beta1.TaskSpec{Steps: simpleTask.Spec.Steps, Workspaces: simpleTask.Spec.Workspaces},
 	}
-
-	pod, err := r.createPod(testAssets.Ctx, taskRun, rtr)
+	taskSpec := updateTaskSpecParamsContextsResults(taskRun, rtr)
+	pod, err := r.createPod(testAssets.Ctx, taskSpec, taskRun, rtr)
 
 	if err != nil {
 		t.Fatalf("create pod threw error %v", err)
@@ -2160,76 +2316,54 @@ func TestExpandMountPath(t *testing.T) {
 func TestExpandMountPath_DuplicatePaths(t *testing.T) {
 	expectedError := "workspace mount path \"/temppath/duplicate\" must be unique: workspaces[1].mountpath"
 	// The task has two workspaces, with different mount path strings.
-	simpleTask := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{
-				{
-					Name:        "tr-workspace",
-					Description: "a test task workspace",
-					MountPath:   "/temppath/$(params.source-path)",
-					ReadOnly:    true,
-				},
-				{
-					Name:        "tr-workspace-two",
-					Description: "a second task workspace",
-					MountPath:   "/temppath/$(params.source-path-two)",
-					ReadOnly:    true,
-				},
-			},
-			Params: []v1beta1.ParamSpec{
-				{
-					Name: "source-path",
-					Type: v1beta1.ParamTypeString,
-				},
-				{
-					Name: "source-path-two",
-					Type: v1beta1.ParamTypeString,
-				},
-			},
-			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "foo",
-					Name:    "simple-step",
-					Command: []string{"/mycmd"},
-					Env: []corev1.EnvVar{{
-						Name:  "foo",
-						Value: "bar",
-					}},
-				},
-			}},
-		},
-	}
+	simpleTask := parse.MustParseTask(t, `
+metadata:
+  name: test-task
+  namespace: foo
+spec:
+  params:
+  - name: source-path
+    type: string
+  - name: source-path-two
+    type: string
+  steps:
+  - command:
+    - /mycmd
+    env:
+    - name: foo
+      value: bar
+    image: foo
+    name: simple-step
+  workspaces:
+  - description: a test task workspace
+    mountPath: /temppath/$(params.source-path)
+    name: tr-workspace
+    readOnly: true
+  - description: a second task workspace
+    mountPath: /temppath/$(params.source-path-two)
+    name: tr-workspace-two
+    readOnly: true
+`)
 
 	// The parameter values will cause the two Workspaces to have duplicate mount path values after the parameters are expanded.
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-not-started", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-			Workspaces: []v1beta1.WorkspaceBinding{
-				{
-					Name:     "tr-workspace",
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-				{
-					Name:     "tr-workspace-two",
-					EmptyDir: &corev1.EmptyDirVolumeSource{},
-				},
-			},
-			Params: []v1beta1.Param{
-				{
-					Name:  "source-path",
-					Value: *v1beta1.NewArrayOrString("duplicate"),
-				},
-				{
-					Name:  "source-path-two",
-					Value: *v1beta1.NewArrayOrString("duplicate"),
-				},
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-not-started
+  namespace: foo
+spec:
+  params:
+  - name: source-path
+    value: duplicate
+  - name: source-path-two
+    value: duplicate
+  taskRef:
+    name: test-task
+  workspaces:
+  - emptyDir: {}
+    name: tr-workspace
+  - emptyDir: {}
+    name: tr-workspace-two
+`)
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -2267,7 +2401,8 @@ func TestExpandMountPath_DuplicatePaths(t *testing.T) {
 		TaskSpec: &v1beta1.TaskSpec{Steps: simpleTask.Spec.Steps, Workspaces: simpleTask.Spec.Workspaces},
 	}
 
-	_, err := r.createPod(testAssets.Ctx, taskRun, rtr)
+	taskSpec := updateTaskSpecParamsContextsResults(taskRun, rtr)
+	_, err := r.createPod(testAssets.Ctx, taskSpec, taskRun, rtr)
 
 	if err == nil || err.Error() != expectedError {
 		t.Errorf("Expected to fail validation for duplicate Workspace mount paths, error was %v", err)
@@ -2275,27 +2410,18 @@ func TestExpandMountPath_DuplicatePaths(t *testing.T) {
 }
 
 func TestHandlePodCreationError(t *testing.T) {
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-taskrun-pod-creation-failed"},
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: simpleTask.Name,
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionUnknown,
-					},
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				StartTime: &metav1.Time{Time: now},
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-pod-creation-failed
+spec:
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  startTime: "2022-01-01T00:00:00Z"
+`)
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
 		Tasks:    []*v1beta1.Task{simpleTask},
@@ -2344,7 +2470,7 @@ func TestHandlePodCreationError(t *testing.T) {
 	}}
 	for _, tc := range testcases {
 		t.Run(tc.description, func(t *testing.T) {
-			c.handlePodCreationError(testAssets.Ctx, taskRun, tc.err)
+			c.handlePodCreationError(taskRun, tc.err)
 			foundCondition := false
 			for _, cond := range taskRun.Status.Conditions {
 				if cond.Type == tc.expectedType && cond.Status == tc.expectedStatus && cond.Reason == tc.expectedReason {
@@ -2361,256 +2487,141 @@ func TestHandlePodCreationError(t *testing.T) {
 
 func TestReconcileCloudEvents(t *testing.T) {
 
-	taskRunWithNoCEResources := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-no-ce-resources", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       simpleTask.Name,
-				APIVersion: "a1",
-			},
-		},
-	}
-	taskRunWithTwoCEResourcesNoInit := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-two-ce-resources-no-init", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: twoOutputsTask.Name,
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Outputs: []v1beta1.TaskResourceBinding{
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: cloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: cloudEventResource.Name,
-							},
-						},
-					},
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: anotherCloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: anotherCloudEventResource.Name,
-							},
-						},
-					},
-				},
-			},
-		},
-	}
-	taskRunWithTwoCEResourcesInit := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-two-ce-resources-init", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: twoOutputsTask.Name,
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Outputs: []v1beta1.TaskResourceBinding{
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: cloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: cloudEventResource.Name,
-							},
-						},
-					},
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: anotherCloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: anotherCloudEventResource.Name,
-							},
-						},
-					},
-				},
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				CloudEvents: []v1beta1.CloudEventDelivery{
-					{
-						Target: cloudEventTarget1,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-						},
-					},
-					{
-						Target: cloudEventTarget2,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-						},
-					},
-				},
-			},
-		},
-	}
-	taskRunWithCESucceded := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-ce-succeeded", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: twoOutputsTask.Name,
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Outputs: []v1beta1.TaskResourceBinding{
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: cloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: cloudEventResource.Name,
-							},
-						},
-					},
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: anotherCloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: anotherCloudEventResource.Name,
-							},
-						},
-					},
-				},
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionTrue,
-					},
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				CloudEvents: []v1beta1.CloudEventDelivery{
-					{
-						Target: cloudEventTarget1,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-						},
-					},
-					{
-						Target: cloudEventTarget2,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-						},
-					},
-				},
-			},
-		},
-	}
-	taskRunWithCESucceded.ObjectMeta.SelfLink = "/task/1234"
-	taskRunWithCEFailed := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-ce-failed", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: twoOutputsTask.Name,
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Outputs: []v1beta1.TaskResourceBinding{
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: cloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: cloudEventResource.Name,
-							},
-						},
-					},
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: anotherCloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: anotherCloudEventResource.Name,
-							},
-						},
-					},
-				},
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionFalse,
-					},
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				CloudEvents: []v1beta1.CloudEventDelivery{
-					{
-						Target: cloudEventTarget1,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-						},
-					},
-					{
-						Target: cloudEventTarget2,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-						},
-					},
-				},
-			},
-		},
-	}
-	taskRunWithCEFailed.ObjectMeta.SelfLink = "/task/1234"
-	taskRunWithCESuccededOneAttempt := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-ce-succeeded-one-attempt", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: twoOutputsTask.Name,
-			},
-			Resources: &v1beta1.TaskRunResources{
-				Outputs: []v1beta1.TaskResourceBinding{
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: cloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: cloudEventResource.Name,
-							},
-						},
-					},
-					{
-						PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-							Name: anotherCloudEventResource.Name,
-							ResourceRef: &resourcev1alpha1.PipelineResourceRef{
-								Name: anotherCloudEventResource.Name,
-							},
-						},
-					},
-				},
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionTrue,
-					},
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				CloudEvents: []v1beta1.CloudEventDelivery{
-					{
-						Target: cloudEventTarget1,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition:  v1beta1.CloudEventConditionUnknown,
-							RetryCount: 1,
-						},
-					},
-					{
-						Target: cloudEventTarget2,
-						Status: v1beta1.CloudEventDeliveryState{
-							Condition: v1beta1.CloudEventConditionUnknown,
-							Error:     "fakemessage",
-						},
-					},
-				},
-			},
-		},
-	}
-	taskRunWithCESuccededOneAttempt.ObjectMeta.SelfLink = "/task/1234"
+	taskRunWithNoCEResources := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-no-ce-resources
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task
+`)
+	taskRunWithTwoCEResourcesNoInit := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-two-ce-resources-no-init
+  namespace: foo
+spec:
+  resources:
+    outputs:
+    - name: cloud-event-resource
+      resourceRef:
+        name: cloud-event-resource
+    - name: another-cloud-event-resource
+      resourceRef:
+        name: another-cloud-event-resource
+  taskRef:
+    name: test-two-output-task
+`)
+	taskRunWithTwoCEResourcesInit := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-two-ce-resources-init
+  namespace: foo
+spec:
+  resources:
+    outputs:
+    - name: cloud-event-resource
+      resourceRef:
+        name: cloud-event-resource
+    - name: another-cloud-event-resource
+      resourceRef:
+        name: another-cloud-event-resource
+  taskRef:
+    name: test-two-output-task
+status:
+  cloudEvents:
+  - status:
+      condition: Unknown
+    target: https://foo
+  - status:
+      condition: Unknown
+    target: https://bar
+`)
+	taskRunWithCESucceded := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-ce-succeeded
+  namespace: foo
+  selfLink: /task/1234
+spec:
+  resources:
+    outputs:
+    - name: cloud-event-resource
+      resourceRef:
+        name: cloud-event-resource
+    - name: another-cloud-event-resource
+      resourceRef:
+        name: another-cloud-event-resource
+  taskRef:
+    name: test-two-output-task
+status:
+  cloudEvents:
+  - status:
+      condition: Unknown
+    target: https://foo
+  - status:
+      condition: Unknown
+    target: https://bar
+  conditions:
+  - status: "True"
+    type: Succeeded
+`)
+	taskRunWithCEFailed := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-ce-failed
+  namespace: foo
+  selfLink: /task/1234
+spec:
+  resources:
+    outputs:
+    - name: cloud-event-resource
+      resourceRef:
+        name: cloud-event-resource
+    - name: another-cloud-event-resource
+      resourceRef:
+        name: another-cloud-event-resource
+  taskRef:
+    name: test-two-output-task
+status:
+  cloudEvents:
+  - status:
+      condition: Unknown
+    target: https://foo
+  - status:
+      condition: Unknown
+    target: https://bar
+  conditions:
+  - status: "False"
+    type: Succeeded
+`)
+	taskRunWithCESuccededOneAttempt := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-ce-succeeded-one-attempt
+  namespace: foo
+  selfLink: /task/1234
+spec:
+  resources:
+    outputs:
+    - name: cloud-event-resource
+      resourceRef:
+        name: cloud-event-resource
+    - name: another-cloud-event-resource
+      resourceRef:
+        name: another-cloud-event-resource
+  taskRef:
+    name: test-two-output-task
+status:
+  cloudEvents:
+  - status:
+      condition: Unknown
+      retryCount: 1
+    target: https://foo
+  - status:
+      condition: Unknown
+      message: fakemessage
+    target: https://bar
+  conditions:
+  - status: "True"
+    type: Succeeded
+`)
 	taskruns := []*v1beta1.TaskRun{
 		taskRunWithNoCEResources, taskRunWithTwoCEResourcesNoInit,
 		taskRunWithTwoCEResourcesInit, taskRunWithCESucceded, taskRunWithCEFailed,
@@ -2764,26 +2775,20 @@ func TestReconcileCloudEvents(t *testing.T) {
 
 func TestReconcile_Single_SidecarState(t *testing.T) {
 	runningState := corev1.ContainerStateRunning{StartedAt: metav1.Time{Time: now}}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-taskrun-sidecars"},
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: taskSidecar.Name,
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Sidecars: []v1beta1.SidecarState{{
-					Name:          "sidecar",
-					ImageID:       "image-id",
-					ContainerName: "sidecar-sidecar",
-					ContainerState: corev1.ContainerState{
-						Running: &runningState,
-					},
-				}},
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-sidecars
+spec:
+  taskRef:
+    name: test-task-sidecar
+status:
+  sidecars:
+  - container: sidecar-sidecar
+    imageID: image-id
+    name: sidecar
+    running:
+      startedAt: "2022-01-01T00:00:00Z"
+`)
 
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
@@ -2820,36 +2825,25 @@ func TestReconcile_Single_SidecarState(t *testing.T) {
 func TestReconcile_Multiple_SidecarStates(t *testing.T) {
 	runningState := corev1.ContainerStateRunning{StartedAt: metav1.Time{Time: now}}
 	waitingState := corev1.ContainerStateWaiting{Reason: "PodInitializing"}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{Name: "test-taskrun-sidecars"},
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: taskMultipleSidecars.Name,
-			},
-		},
-		Status: v1beta1.TaskRunStatus{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Sidecars: []v1beta1.SidecarState{
-					{
-						Name:          "sidecar1",
-						ImageID:       "image-id",
-						ContainerName: "sidecar-sidecar1",
-						ContainerState: corev1.ContainerState{
-							Running: &runningState,
-						},
-					},
-					{
-						Name:          "sidecar2",
-						ImageID:       "image-id",
-						ContainerName: "sidecar-sidecar2",
-						ContainerState: corev1.ContainerState{
-							Waiting: &waitingState,
-						},
-					},
-				},
-			},
-		},
-	}
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-sidecars
+spec:
+  taskRef:
+    name: test-task-sidecar
+status:
+  sidecars:
+  - container: sidecar-sidecar1
+    imageID: image-id
+    name: sidecar1
+    running:
+      startedAt: "2022-01-01T00:00:00Z"
+  - container: sidecar-sidecar2
+    imageID: image-id
+    name: sidecar2
+    waiting:
+      reason: PodInitializing
+`)
 
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{taskRun},
@@ -2898,25 +2892,25 @@ func TestReconcile_Multiple_SidecarStates(t *testing.T) {
 // TestReconcileWorkspaceMissing tests a reconcile of a TaskRun that does
 // not include a Workspace that the Task is expecting.
 func TestReconcileWorkspaceMissing(t *testing.T) {
-	taskWithWorkspace := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-with-workspace", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{{
-				Name:        "ws1",
-				Description: "a test task workspace",
-				ReadOnly:    true,
-			}},
-		},
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-missing-workspace", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       taskWithWorkspace.Name,
-				APIVersion: "a1",
-			},
-		},
-	}
+	taskWithWorkspace := parse.MustParseTask(t, `
+metadata:
+  name: test-task-with-workspace
+  namespace: foo
+spec:
+  workspaces:
+  - description: a test task workspace
+    name: ws1
+    readOnly: true
+`)
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-missing-workspace
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-with-workspace
+`)
 	d := test.Data{
 		Tasks:             []*v1beta1.Task{taskWithWorkspace},
 		TaskRuns:          []*v1beta1.TaskRun{taskRun},
@@ -2954,32 +2948,30 @@ func TestReconcileWorkspaceMissing(t *testing.T) {
 // TestReconcileValidDefaultWorkspace tests a reconcile of a TaskRun that does
 // not include a Workspace that the Task is expecting and it uses the default Workspace instead.
 func TestReconcileValidDefaultWorkspace(t *testing.T) {
-	taskWithWorkspace := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-with-workspace", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{{
-				Name:        "ws1",
-				Description: "a test task workspace",
-				ReadOnly:    true,
-			}},
-			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "foo",
-					Name:    "simple-step",
-					Command: []string{"/mycmd"},
-				},
-			}},
-		},
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-default-workspace", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       taskWithWorkspace.Name,
-				APIVersion: "a1",
-			},
-		},
-	}
+	taskWithWorkspace := parse.MustParseTask(t, `
+metadata:
+  name: test-task-with-workspace
+  namespace: foo
+spec:
+  steps:
+  - command:
+    - /mycmd
+    image: foo
+    name: simple-step
+  workspaces:
+  - description: a test task workspace
+    name: ws1
+    readOnly: true
+`)
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-default-workspace
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-with-workspace
+`)
 	d := test.Data{
 		Tasks:             []*v1beta1.Task{taskWithWorkspace},
 		TaskRuns:          []*v1beta1.TaskRun{taskRun},
@@ -3021,32 +3013,30 @@ func TestReconcileValidDefaultWorkspace(t *testing.T) {
 // not include a Workspace that the Task is expecting, and gets an error updating
 // the TaskRun with an invalid default workspace.
 func TestReconcileInvalidDefaultWorkspace(t *testing.T) {
-	taskWithWorkspace := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-with-workspace", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{{
-				Name:        "ws1",
-				Description: "a test task workspace",
-				ReadOnly:    true,
-			}},
-			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "foo",
-					Name:    "simple-step",
-					Command: []string{"/mycmd"},
-				},
-			}},
-		},
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-default-workspace", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       taskWithWorkspace.Name,
-				APIVersion: "a1",
-			},
-		},
-	}
+	taskWithWorkspace := parse.MustParseTask(t, `
+metadata:
+  name: test-task-with-workspace
+  namespace: foo
+spec:
+  steps:
+  - command:
+    - /mycmd
+    image: foo
+    name: simple-step
+  workspaces:
+  - description: a test task workspace
+    name: ws1
+    readOnly: true
+`)
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-default-workspace
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-with-workspace
+`)
 	d := test.Data{
 		Tasks:             []*v1beta1.Task{taskWithWorkspace},
 		TaskRuns:          []*v1beta1.TaskRun{taskRun},
@@ -3085,35 +3075,29 @@ func TestReconcileInvalidDefaultWorkspace(t *testing.T) {
 // injected in place of the omitted optional workspace.
 func TestReconcileValidDefaultWorkspaceOmittedOptionalWorkspace(t *testing.T) {
 	optionalWorkspaceMountPath := "/foo/bar/baz"
-	taskWithOptionalWorkspace := &v1beta1.Task{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-task-with-optional-workspace",
-			Namespace: "default",
-		},
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{{
-				Name:      "optional-ws",
-				MountPath: optionalWorkspaceMountPath,
-				Optional:  true,
-			}},
-			Steps: []v1beta1.Step{{Container: corev1.Container{
-				Name:    "simple-step",
-				Image:   "foo",
-				Command: []string{"/mycmd"},
-			}}},
-		},
-	}
-	taskRunOmittingWorkspace := &v1beta1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-taskrun",
-			Namespace: "default",
-		},
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: "test-task-with-optional-workspace",
-			},
-		},
-	}
+	taskWithOptionalWorkspace := parse.MustParseTask(t, `
+metadata:
+  name: test-task-with-optional-workspace
+  namespace: default
+spec:
+  steps:
+  - command:
+    - /mycmd
+    image: foo
+    name: simple-step
+  workspaces:
+  - mountPath: /foo/bar/baz
+    name: optional-ws
+    optional: true
+`)
+	taskRunOmittingWorkspace := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun
+  namespace: default
+spec:
+  taskRef:
+    name: test-task-with-optional-workspace
+`)
 
 	d := test.Data{
 		Tasks:    []*v1beta1.Task{taskWithOptionalWorkspace},
@@ -3171,38 +3155,30 @@ func TestReconcileTaskResourceResolutionAndValidation(t *testing.T) {
 	}{{
 		desc: "Fail ResolveTaskResources",
 		d: test.Data{
-			Tasks: []*v1beta1.Task{{
-				ObjectMeta: objectMeta("test-task-missing-resource", "foo"),
-				Spec: v1beta1.TaskSpec{
-					Resources: &v1beta1.TaskResources{
-						Inputs: []v1beta1.TaskResource{{
-							ResourceDeclaration: v1beta1.ResourceDeclaration{
-								Name: "workspace",
-								Type: resourcev1alpha1.PipelineResourceTypeGit,
-							},
-						}},
-					},
-				},
-			}},
-			TaskRuns: []*v1beta1.TaskRun{{
-				ObjectMeta: objectMeta("test-taskrun-missing-resource", "foo"),
-				Spec: v1beta1.TaskRunSpec{
-					TaskRef: &v1beta1.TaskRef{
-						Name:       "test-task-missing-resource",
-						APIVersion: "a1",
-					},
-					Resources: &v1beta1.TaskRunResources{
-						Inputs: []v1beta1.TaskResourceBinding{{
-							PipelineResourceBinding: v1beta1.PipelineResourceBinding{
-								Name: "workspace",
-								ResourceRef: &v1beta1.PipelineResourceRef{
-									Name: "git",
-								},
-							},
-						}},
-					},
-				},
-			}},
+			Tasks: []*v1beta1.Task{parse.MustParseTask(t, `
+metadata:
+  name: test-task-missing-resource
+  namespace: foo
+spec:
+  resources:
+    inputs:
+    - name: workspace
+      type: git
+`)},
+			TaskRuns: []*v1beta1.TaskRun{parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-missing-resource
+  namespace: foo
+spec:
+  resources:
+    inputs:
+    - name: workspace
+      resourceRef:
+        name: git
+  taskRef:
+    apiVersion: a1
+    name: test-task-missing-resource
+`)},
 			ClusterTasks:      nil,
 			PipelineResources: nil,
 		},
@@ -3215,28 +3191,25 @@ func TestReconcileTaskResourceResolutionAndValidation(t *testing.T) {
 	}, {
 		desc: "Fail ValidateResolvedTaskResources",
 		d: test.Data{
-			Tasks: []*v1beta1.Task{{
-				ObjectMeta: objectMeta("test-task-missing-resource", "foo"),
-				Spec: v1beta1.TaskSpec{
-					Resources: &v1beta1.TaskResources{
-						Inputs: []v1beta1.TaskResource{{
-							ResourceDeclaration: v1beta1.ResourceDeclaration{
-								Name: "workspace",
-								Type: resourcev1alpha1.PipelineResourceTypeGit,
-							},
-						}},
-					},
-				},
-			}},
-			TaskRuns: []*v1beta1.TaskRun{{
-				ObjectMeta: objectMeta("test-taskrun-missing-resource", "foo"),
-				Spec: v1beta1.TaskRunSpec{
-					TaskRef: &v1beta1.TaskRef{
-						Name:       "test-task-missing-resource",
-						APIVersion: "a1",
-					},
-				},
-			}},
+			Tasks: []*v1beta1.Task{parse.MustParseTask(t, `
+metadata:
+  name: test-task-missing-resource
+  namespace: foo
+spec:
+  resources:
+    inputs:
+    - name: workspace
+      type: git
+`)},
+			TaskRuns: []*v1beta1.TaskRun{parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-missing-resource
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-missing-resource
+`)},
 			ClusterTasks:      nil,
 			PipelineResources: nil,
 		},
@@ -3249,38 +3222,36 @@ func TestReconcileTaskResourceResolutionAndValidation(t *testing.T) {
 	}, {
 		desc: "Fail ValidateTaskSpecRequestResources",
 		d: test.Data{
-			Tasks: []*v1beta1.Task{{
-				ObjectMeta: objectMeta("test-task-invalid-taskspec-resource", "foo"),
-				Spec: v1beta1.TaskSpec{
-					Workspaces: []v1beta1.WorkspaceDeclaration{{
-						Name:        "ws1",
-						Description: "a test task workspace",
-						ReadOnly:    true,
-					}},
-					Steps: []v1beta1.Step{{Container: corev1.Container{
-						Image:   "image",
-						Command: []string{"cmd"},
-						Resources: corev1.ResourceRequirements{
-							Requests: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("8"),
-								corev1.ResourceMemory: resource.MustParse("8Gi"),
-							},
-							Limits: corev1.ResourceList{
-								corev1.ResourceCPU:    resource.MustParse("8"),
-								corev1.ResourceMemory: resource.MustParse("4Gi"),
-							},
-						},
-					}}}},
-			}},
-			TaskRuns: []*v1beta1.TaskRun{{
-				ObjectMeta: objectMeta("test-taskrun-invalid-taskspec-resource", "foo"),
-				Spec: v1beta1.TaskRunSpec{
-					TaskRef: &v1beta1.TaskRef{
-						Name:       "test-task-invalid-taskspec-resource",
-						APIVersion: "a1",
-					},
-				},
-			}},
+			Tasks: []*v1beta1.Task{parse.MustParseTask(t, `
+metadata:
+  name: test-task-invalid-taskspec-resource
+  namespace: foo
+spec:
+  steps:
+  - command:
+    - cmd
+    image: image
+    resources:
+      limits:
+        cpu: "8"
+        memory: 4Gi
+      requests:
+        cpu: "8"
+        memory: 8Gi
+  workspaces:
+  - description: a test task workspace
+    name: ws1
+    readOnly: true
+`)},
+			TaskRuns: []*v1beta1.TaskRun{parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-invalid-taskspec-resource
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-invalid-taskspec-resource
+`)},
 			ClusterTasks:      nil,
 			PipelineResources: nil,
 		},
@@ -3332,52 +3303,37 @@ func TestReconcileTaskResourceResolutionAndValidation(t *testing.T) {
 // Affinity Assistant is validated and that the validation fails for a TaskRun that is incompatible with
 // Affinity Assistant; e.g. using more than one PVC-backed workspace.
 func TestReconcileWithWorkspacesIncompatibleWithAffinityAssistant(t *testing.T) {
-	taskWithTwoWorkspaces := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-two-workspaces", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{
-				{
-					Name:        "ws1",
-					Description: "task workspace",
-					ReadOnly:    true,
-				},
-				{
-					Name:        "ws2",
-					Description: "another workspace",
-					ReadOnly:    false,
-				},
-			},
-		},
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("taskrun-with-two-workspaces", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       taskWithTwoWorkspaces.Name,
-				APIVersion: "a1",
-			},
-			Workspaces: []v1beta1.WorkspaceBinding{
-				{
-					Name: "ws1",
-					PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
-						ClaimName: "pvc1",
-					},
-				},
-				{
-					Name: "ws2",
-					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: "pvc2",
-						},
-						Spec: corev1.PersistentVolumeClaimSpec{},
-					},
-				},
-			},
-		},
-	}
-
-	// associate the TaskRun with a dummy Affinity Assistant
-	taskRun.Annotations[workspace.AnnotationAffinityAssistantName] = "dummy-affinity-assistant"
+	taskWithTwoWorkspaces := parse.MustParseTask(t, `
+metadata:
+  name: test-task-two-workspaces
+  namespace: foo
+spec:
+  workspaces:
+  - description: task workspace
+    name: ws1
+    readOnly: true
+  - description: another workspace
+    name: ws2
+`)
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  annotations:
+    pipeline.tekton.dev/affinity-assistant: dummy-affinity-assistant
+  name: taskrun-with-two-workspaces
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-two-workspaces
+  workspaces:
+  - name: ws1
+    persistentVolumeClaim:
+      claimName: pvc1
+  - name: ws2
+    volumeClaimTemplate:
+      metadata:
+        name: pvc2
+`)
 
 	d := test.Data{
 		Tasks:             []*v1beta1.Task{taskWithTwoWorkspaces},
@@ -3415,45 +3371,36 @@ func TestReconcileWithWorkspacesIncompatibleWithAffinityAssistant(t *testing.T) 
 // TestReconcileWorkspaceWithVolumeClaimTemplate tests a reconcile of a TaskRun that has
 // a Workspace with VolumeClaimTemplate and check that it is translated to a created PersistentVolumeClaim.
 func TestReconcileWorkspaceWithVolumeClaimTemplate(t *testing.T) {
-	workspaceName := "ws1"
-	claimName := "mypvc"
-	taskWithWorkspace := &v1beta1.Task{
-		ObjectMeta: objectMeta("test-task-with-workspace", "foo"),
-		Spec: v1beta1.TaskSpec{
-			Workspaces: []v1beta1.WorkspaceDeclaration{{
-				Name:        workspaceName,
-				Description: "a test task workspace",
-				ReadOnly:    true,
-			}},
-			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "foo",
-					Name:    "simple-step",
-					Command: []string{"/mycmd"},
-				},
-			}},
-		},
-	}
-	taskRun := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun-missing-workspace", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name:       taskWithWorkspace.Name,
-				APIVersion: "a1",
-			},
-			Workspaces: []v1beta1.WorkspaceBinding{
-				{
-					Name: workspaceName,
-					VolumeClaimTemplate: &corev1.PersistentVolumeClaim{
-						ObjectMeta: metav1.ObjectMeta{
-							Name: claimName,
-						},
-						Spec: corev1.PersistentVolumeClaimSpec{},
-					},
-				},
-			},
-		},
-	}
+	taskWithWorkspace := parse.MustParseTask(t, `
+metadata:
+  name: test-task-with-workspace
+  namespace: foo
+spec:
+  steps:
+  - command:
+    - /mycmd
+    image: foo
+    name: simple-step
+  workspaces:
+  - description: a test task workspace
+    name: ws1
+    readOnly: true
+`)
+	taskRun := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-missing-workspace
+  namespace: foo
+spec:
+  taskRef:
+    apiVersion: a1
+    name: test-task-with-workspace
+  workspaces:
+  - name: ws1
+    volumeClaimTemplate:
+      metadata:
+        creationTimestamp: null
+        name: mypvc
+`)
 	d := test.Data{
 		Tasks:             []*v1beta1.Task{taskWithWorkspace},
 		TaskRuns:          []*v1beta1.TaskRun{taskRun},
@@ -3493,10 +3440,6 @@ func TestReconcileWorkspaceWithVolumeClaimTemplate(t *testing.T) {
 }
 
 func TestFailTaskRun(t *testing.T) {
-	runningState := corev1.ContainerStateRunning{StartedAt: metav1.Time{Time: now}}
-	terminatedState := corev1.ContainerStateTerminated{StartedAt: metav1.Time{Time: now}, FinishedAt: metav1.Time{Time: now}, Reason: "Completed"}
-	terminatedWithErrorState := corev1.ContainerStateTerminated{StartedAt: metav1.Time{Time: now}, FinishedAt: metav1.Time{Time: now}, Reason: "Completed", ExitCode: 12}
-	waitingState := corev1.ContainerStateWaiting{Reason: "PodInitializing"}
 	testCases := []struct {
 		name               string
 		taskRun            *v1beta1.TaskRun
@@ -3507,25 +3450,19 @@ func TestFailTaskRun(t *testing.T) {
 		expectedStepStates []v1beta1.StepState
 	}{{
 		name: "no-pod-scheduled",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-failed", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: simpleTask.Name,
-				},
-				Status: v1beta1.TaskRunSpecStatusCancelled,
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						},
-					},
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-failed
+  namespace: foo
+spec:
+  status: TaskRunCancelled
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+`),
 		reason:  "some reason",
 		message: "some message",
 		expectedStatus: apis.Condition{
@@ -3536,28 +3473,20 @@ func TestFailTaskRun(t *testing.T) {
 		},
 	}, {
 		name: "pod-scheduled",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-failed", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: simpleTask.Name,
-				},
-				Status: v1beta1.TaskRunSpecStatusCancelled,
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						},
-					},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName: "foo-is-bar",
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-failed
+  namespace: foo
+spec:
+  status: TaskRunCancelled
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  podName: foo-is-bar
+`),
 		pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
 			Name:      "foo-is-bar",
@@ -3572,33 +3501,23 @@ func TestFailTaskRun(t *testing.T) {
 		},
 	}, {
 		name: "step-status-update-cancel",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-cancel", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: simpleTask.Name,
-				},
-				Status: v1beta1.TaskRunSpecStatusCancelled,
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						},
-					},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName: "foo-is-bar",
-					Steps: []v1beta1.StepState{{
-						ContainerState: corev1.ContainerState{
-							Running: &runningState,
-						},
-					}},
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-cancel
+  namespace: foo
+spec:
+  status: TaskRunCancelled
+  taskRef:
+    name: test-task
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  podName: foo-is-bar
+  steps:
+  - running:
+      startedAt: "2022-01-01T00:00:00Z"
+`),
 		pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
 			Name:      "foo-is-bar",
@@ -3623,33 +3542,23 @@ func TestFailTaskRun(t *testing.T) {
 		},
 	}, {
 		name: "step-status-update-timeout",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-timeout", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: simpleTask.Name,
-				},
-				Timeout: &metav1.Duration{Duration: 10 * time.Second},
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						},
-					},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName: "foo-is-bar",
-					Steps: []v1beta1.StepState{{
-						ContainerState: corev1.ContainerState{
-							Running: &runningState,
-						},
-					}},
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-timeout
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task
+  timeout: 10s
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  podName: foo-is-bar
+  steps:
+  - running:
+      startedAt: "2022-01-01T00:00:00Z"
+`),
 		pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
 			Name:      "foo-is-bar",
@@ -3674,45 +3583,30 @@ func TestFailTaskRun(t *testing.T) {
 		},
 	}, {
 		name: "step-status-update-multiple-steps",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-timeout-multiple-steps", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: taskMultipleSteps.Name,
-				},
-				Timeout: &metav1.Duration{Duration: 10 * time.Second},
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						},
-					},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName: "foo-is-bar",
-					Steps: []v1beta1.StepState{
-						{
-							ContainerState: corev1.ContainerState{
-								Terminated: &terminatedState,
-							},
-						},
-						{
-							ContainerState: corev1.ContainerState{
-								Running: &runningState,
-							},
-						},
-						{
-							ContainerState: corev1.ContainerState{
-								Running: &runningState,
-							},
-						},
-					},
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-timeout-multiple-steps
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task-multi-steps
+  timeout: 10s
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  podName: foo-is-bar
+  steps:
+  - terminated:
+      exitCode: 0
+      finishedAt: "2022-01-01T00:00:00Z"
+      reason: Completed
+      startedAt: "2022-01-01T00:00:00Z"
+  - running:
+      startedAt: "2022-01-01T00:00:00Z"
+  - running:
+      startedAt: "2022-01-01T00:00:00Z"
+`),
 		pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
 			Name:      "foo-is-bar",
@@ -3753,45 +3647,27 @@ func TestFailTaskRun(t *testing.T) {
 		},
 	}, {
 		name: "step-status-update-multiple-steps-waiting-state",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-timeout-multiple-steps-waiting", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: taskMultipleSteps.Name,
-				},
-				Timeout: &metav1.Duration{Duration: 10 * time.Second},
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionUnknown,
-						},
-					},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName: "foo-is-bar",
-					Steps: []v1beta1.StepState{
-						{
-							ContainerState: corev1.ContainerState{
-								Waiting: &waitingState,
-							},
-						},
-						{
-							ContainerState: corev1.ContainerState{
-								Waiting: &waitingState,
-							},
-						},
-						{
-							ContainerState: corev1.ContainerState{
-								Waiting: &waitingState,
-							},
-						},
-					},
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-timeout-multiple-steps-waiting
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task-multi-steps
+  timeout: 10s
+status:
+  conditions:
+  - status: Unknown
+    type: Succeeded
+  podName: foo-is-bar
+  steps:
+  - waiting:
+      reason: PodInitializing
+  - waiting:
+      reason: PodInitializing
+  - waiting:
+      reason: PodInitializing
+`),
 		pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
 			Name:      "foo-is-bar",
@@ -3832,39 +3708,27 @@ func TestFailTaskRun(t *testing.T) {
 		},
 	}, {
 		name: "step-status-update-with-multiple-steps-and-some-continue-on-error",
-		taskRun: &v1beta1.TaskRun{
-			ObjectMeta: objectMeta("test-taskrun-run-ignore-step-error", "foo"),
-			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{
-					Name: taskMultipleStepsIgnoreError.Name,
-				},
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{
-						apis.Condition{
-							Type:   apis.ConditionSucceeded,
-							Status: corev1.ConditionTrue,
-						},
-					},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName: "foo-is-bar",
-					Steps: []v1beta1.StepState{
-						{
-							ContainerState: corev1.ContainerState{
-								Terminated: &terminatedWithErrorState,
-							},
-						},
-						{
-							ContainerState: corev1.ContainerState{
-								Running: &runningState,
-							},
-						},
-					},
-				},
-			},
-		},
+		taskRun: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun-run-ignore-step-error
+  namespace: foo
+spec:
+  taskRef:
+    name: test-task-multi-steps-with-ignore-error
+status:
+  conditions:
+  - status: "True"
+    type: Succeeded
+  podName: foo-is-bar
+  steps:
+  - terminated:
+      exitCode: 12
+      finishedAt: "2022-01-01T00:00:00Z"
+      reason: Completed
+      startedAt: "2022-01-01T00:00:00Z"
+  - running:
+      startedAt: "2022-01-01T00:00:00Z"
+`),
 		pod: &corev1.Pod{ObjectMeta: metav1.ObjectMeta{
 			Namespace: "foo",
 			Name:      "foo-is-bar",
@@ -3942,20 +3806,17 @@ func TestFailTaskRun(t *testing.T) {
 }
 
 func Test_storeTaskSpec(t *testing.T) {
-	labels := map[string]string{"lbl1": "value1"}
-	annotations := map[string]string{"io.annotation": "value"}
-	tr := &v1beta1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:        "foo",
-			Labels:      labels,
-			Annotations: annotations,
-		},
-		Spec: v1beta1.TaskRunSpec{
-			TaskRef: &v1beta1.TaskRef{
-				Name: "foo-task",
-			},
-		},
-	}
+	tr := parse.MustParseTaskRun(t, `
+metadata:
+  annotations:
+    io.annotation: value
+  labels:
+    lbl1: value1
+  name: foo
+spec:
+  taskRef:
+    name: foo-task
+`)
 
 	ts := v1beta1.TaskSpec{
 		Description: "foo-task",
@@ -4077,21 +3938,20 @@ func TestWillOverwritePodAffinity(t *testing.T) {
 }
 
 func TestPodAdoption(t *testing.T) {
-	tr := &v1beta1.TaskRun{
-		ObjectMeta: objectMeta("test-taskrun", "foo"),
-		Spec: v1beta1.TaskRunSpec{
-			TaskSpec: &v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
-					Container: corev1.Container{
-						Image:   "myimage",
-						Name:    "mycontainer",
-						Command: []string{"/mycmd"},
-					},
-				}},
-			},
-		},
-	}
-	tr.ObjectMeta.Labels = map[string]string{"mylabel": "myvalue"}
+	tr := parse.MustParseTaskRun(t, `
+metadata:
+  labels:
+    mylabel: myvalue
+  name: test-taskrun
+  namespace: foo
+spec:
+  taskSpec:
+    steps:
+    - command:
+      - /mycmd
+      image: myimage
+      name: mycontainer
+`)
 
 	d := test.Data{
 		TaskRuns: []*v1beta1.TaskRun{tr},
@@ -4158,34 +4018,20 @@ func TestPodAdoption(t *testing.T) {
 }
 
 func TestStopSidecars_ClientGetPodForTaskSpecWithSidecars(t *testing.T) {
-	startTime := time.Date(2000, 1, 1, 1, 1, 1, 1, time.UTC)
-	tr := &v1beta1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{
-			Name:      "test-taskrun",
-			Namespace: "foo",
-		},
-		Status: v1beta1.TaskRunStatus{
-			Status: duckv1beta1.Status{
-				Conditions: duckv1beta1.Conditions{
-					apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionTrue,
-					},
-				},
-			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				PodName:   "test-taskrun-pod",
-				StartTime: &metav1.Time{Time: startTime},
-				Sidecars: []v1beta1.SidecarState{{
-					ContainerState: corev1.ContainerState{
-						Running: &corev1.ContainerStateRunning{
-							StartedAt: metav1.Time{startTime},
-						},
-					},
-				}},
-			},
-		},
-	}
+	tr := parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun
+  namespace: foo
+status:
+  conditions:
+  - status: "True"
+    type: Succeeded
+  podName: test-taskrun-pod
+  sidecars:
+  - running:
+      startedAt: "2000-01-01T01:01:01Z"
+  startTime: "2000-01-01T01:01:01Z"
+`)
 
 	pod := &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{
@@ -4224,60 +4070,40 @@ func TestStopSidecars_ClientGetPodForTaskSpecWithSidecars(t *testing.T) {
 }
 
 func TestStopSidecars_NoClientGetPodForTaskSpecWithoutRunningSidecars(t *testing.T) {
-	startTime := time.Date(2000, 1, 1, 1, 1, 1, 1, time.UTC)
-
 	for _, tc := range []struct {
 		desc string
 		tr   *v1beta1.TaskRun
 	}{{
 		desc: "no sidecars",
-		tr: &v1beta1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-taskrun",
-				Namespace: "foo",
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionTrue,
-					}},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName:   "test-taskrun-pod",
-					StartTime: &metav1.Time{Time: startTime},
-					Sidecars:  []v1beta1.SidecarState{},
-				},
-			},
-		},
+		tr: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun
+  namespace: foo
+status:
+  conditions:
+  - status: "True"
+    type: Succeeded
+  podName: test-taskrun-pod
+  startTime: "2000-01-01T01:01:01Z"
+`),
 	}, {
 		desc: "sidecars are terminated",
-		tr: &v1beta1.TaskRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "test-taskrun",
-				Namespace: "foo",
-			},
-			Status: v1beta1.TaskRunStatus{
-				Status: duckv1beta1.Status{
-					Conditions: duckv1beta1.Conditions{apis.Condition{
-						Type:   apis.ConditionSucceeded,
-						Status: corev1.ConditionTrue,
-					}},
-				},
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					PodName:   "test-taskrun-pod",
-					StartTime: &metav1.Time{Time: startTime},
-					Sidecars: []v1beta1.SidecarState{{
-						ContainerState: corev1.ContainerState{
-							Terminated: &corev1.ContainerStateTerminated{
-								StartedAt:  metav1.Time{startTime},
-								FinishedAt: metav1.Time{startTime},
-							},
-						},
-					}},
-				},
-			},
-		},
+		tr: parse.MustParseTaskRun(t, `
+metadata:
+  name: test-taskrun
+  namespace: foo
+status:
+  conditions:
+  - status: "True"
+    type: Succeeded
+  podName: test-taskrun-pod
+  sidecars:
+  - terminated:
+      exitCode: 0
+      finishedAt: "2000-01-01T01:01:01Z"
+      startedAt: "2000-01-01T01:01:01Z"
+  startTime: "2000-01-01T01:01:01Z"
+`),
 	}} {
 		t.Run(tc.desc, func(t *testing.T) {
 			d := test.Data{
@@ -4306,8 +4132,6 @@ func TestStopSidecars_NoClientGetPodForTaskSpecWithoutRunningSidecars(t *testing
 }
 
 func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
-	ctx := context.Background()
-
 	tcs := []struct {
 		name     string
 		taskSpec *v1beta1.TaskSpec
@@ -4316,12 +4140,10 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 		taskSpec: &v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{
 				{
-					Container: corev1.Container{
-						Image:   "image",
-						Command: []string{"cmd"},
-					},
+					Image:   "image",
+					Command: []string{"cmd"},
 				}},
-			StepTemplate: &corev1.Container{
+			StepTemplate: &v1beta1.StepTemplate{
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("4"),
@@ -4333,7 +4155,7 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 	}, {
 		name: "no limit configured",
 		taskSpec: &v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{Container: corev1.Container{
+			Steps: []v1beta1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"},
 				Resources: corev1.ResourceRequirements{
@@ -4342,12 +4164,12 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 						corev1.ResourceMemory: resource.MustParse("4Gi"),
 					},
 				},
-			}}},
+			}},
 		},
 	}, {
 		name: "request less or equal than step limit but larger than steptemplate limit",
 		taskSpec: &v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{Container: corev1.Container{
+			Steps: []v1beta1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"},
 				Resources: corev1.ResourceRequirements{
@@ -4360,8 +4182,8 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 						corev1.ResourceMemory: resource.MustParse("8Gi"),
 					},
 				},
-			}}},
-			StepTemplate: &corev1.Container{
+			}},
+			StepTemplate: &v1beta1.StepTemplate{
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("4"),
@@ -4373,7 +4195,7 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 	}, {
 		name: "request less or equal than step limit",
 		taskSpec: &v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{Container: corev1.Container{
+			Steps: []v1beta1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"},
 				Resources: corev1.ResourceRequirements{
@@ -4386,12 +4208,12 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 						corev1.ResourceMemory: resource.MustParse("8Gi"),
 					},
 				},
-			}}},
+			}},
 		},
 	}, {
 		name: "request less or equal than steptemplate limit",
 		taskSpec: &v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{Container: corev1.Container{
+			Steps: []v1beta1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"},
 				Resources: corev1.ResourceRequirements{
@@ -4400,8 +4222,8 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 						corev1.ResourceMemory: resource.MustParse("4Gi"),
 					},
 				},
-			}}},
-			StepTemplate: &corev1.Container{
+			}},
+			StepTemplate: &v1beta1.StepTemplate{
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
@@ -4414,7 +4236,7 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateTaskSpecRequestResources(ctx, tc.taskSpec); err != nil {
+			if err := validateTaskSpecRequestResources(tc.taskSpec); err != nil {
 				t.Fatalf("Expected to see error when validating invalid TaskSpec resources but saw none")
 			}
 		})
@@ -4423,14 +4245,13 @@ func Test_validateTaskSpecRequestResources_ValidResources(t *testing.T) {
 }
 
 func Test_validateTaskSpecRequestResources_InvalidResources(t *testing.T) {
-	ctx := context.Background()
 	tcs := []struct {
 		name     string
 		taskSpec *v1beta1.TaskSpec
 	}{{
 		name: "step request larger than step limit",
 		taskSpec: &v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{Container: corev1.Container{
+			Steps: []v1beta1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"},
 				Resources: corev1.ResourceRequirements{
@@ -4443,11 +4264,11 @@ func Test_validateTaskSpecRequestResources_InvalidResources(t *testing.T) {
 						corev1.ResourceMemory: resource.MustParse("4Gi"),
 					},
 				},
-			}}}},
+			}}},
 	}, {
 		name: "step request larger than steptemplate limit",
 		taskSpec: &v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{Container: corev1.Container{
+			Steps: []v1beta1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"},
 				Resources: corev1.ResourceRequirements{
@@ -4456,8 +4277,8 @@ func Test_validateTaskSpecRequestResources_InvalidResources(t *testing.T) {
 						corev1.ResourceMemory: resource.MustParse("8Gi"),
 					},
 				},
-			}}},
-			StepTemplate: &corev1.Container{
+			}},
+			StepTemplate: &v1beta1.StepTemplate{
 				Resources: corev1.ResourceRequirements{
 					Limits: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
@@ -4470,7 +4291,7 @@ func Test_validateTaskSpecRequestResources_InvalidResources(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := validateTaskSpecRequestResources(ctx, tc.taskSpec); err == nil {
+			if err := validateTaskSpecRequestResources(tc.taskSpec); err == nil {
 				t.Fatalf("Expected to see error when validating invalid TaskSpec resources but saw none")
 			}
 		})
@@ -4523,7 +4344,7 @@ func podVolumeMounts(idx, totalSteps int) []corev1.VolumeMount {
 	return mnts
 }
 
-func podArgs(stepName string, cmd string, additionalArgs []string, idx int) []string {
+func podArgs(cmd string, additionalArgs []string, idx int) []string {
 	args := []string{
 		"-wait_file",
 	}
@@ -4582,15 +4403,20 @@ func podObjectMeta(name, taskName, taskRunName, ns string, isClusterTask bool) m
 }
 
 type stepForExpectedPod struct {
-	name       string
-	image      string
-	cmd        string
-	args       []string
-	envVars    map[string]string
-	workingDir string
+	name            string
+	image           string
+	cmd             string
+	args            []string
+	envVars         map[string]string
+	workingDir      string
+	securityContext *corev1.SecurityContext
 }
 
 func expectedPod(podName, taskName, taskRunName, ns, saName string, isClusterTask bool, extraVolumes []corev1.Volume, steps []stepForExpectedPod) *corev1.Pod {
+	stepNames := make([]string, 0, len(steps))
+	for _, s := range steps {
+		stepNames = append(stepNames, fmt.Sprintf("step-%s", s.name))
+	}
 	p := &corev1.Pod{
 		ObjectMeta: podObjectMeta(podName, taskName, taskRunName, ns, isClusterTask),
 		Spec: corev1.PodSpec{
@@ -4602,24 +4428,12 @@ func expectedPod(podName, taskName, taskRunName, ns, saName string, isClusterTas
 				binVolume,
 				downwardVolume,
 			},
-			InitContainers:        []corev1.Container{placeToolsInitContainer},
+			InitContainers:        []corev1.Container{placeToolsInitContainer(stepNames)},
 			RestartPolicy:         corev1.RestartPolicyNever,
 			ActiveDeadlineSeconds: &defaultActiveDeadlineSeconds,
 			ServiceAccountName:    saName,
 		},
 	}
-
-	stepNames := make([]string, 0, len(steps))
-	for _, s := range steps {
-		stepNames = append(stepNames, fmt.Sprintf("step-%s", s.name))
-	}
-	p.Spec.InitContainers = []corev1.Container{placeToolsInitContainer, {
-		Name:         "step-init",
-		Image:        images.EntrypointImage,
-		Command:      append([]string{"/ko-app/entrypoint", "step-init"}, stepNames...),
-		WorkingDir:   "/",
-		VolumeMounts: []v1.VolumeMount{{Name: "tekton-internal-steps", MountPath: "/tekton/steps"}},
-	}}
 
 	for idx, s := range steps {
 		p.Spec.Volumes = append(p.Spec.Volumes, corev1.Volume{
@@ -4635,7 +4449,7 @@ func expectedPod(podName, taskName, taskRunName, ns, saName string, isClusterTas
 			VolumeMounts:           podVolumeMounts(idx, len(steps)),
 			TerminationMessagePath: "/tekton/termination",
 		}
-		stepContainer.Args = podArgs(s.name, s.cmd, s.args, idx)
+		stepContainer.Args = podArgs(s.cmd, s.args, idx)
 
 		for k, v := range s.envVars {
 			stepContainer.Env = append(stepContainer.Env, corev1.EnvVar{
@@ -4646,6 +4460,10 @@ func expectedPod(podName, taskName, taskRunName, ns, saName string, isClusterTas
 
 		if s.workingDir != "" {
 			stepContainer.WorkingDir = s.workingDir
+		}
+
+		if s.securityContext != nil {
+			stepContainer.SecurityContext = s.securityContext
 		}
 
 		p.Spec.Containers = append(p.Spec.Containers, stepContainer)

@@ -18,6 +18,7 @@ limitations under the License.
 package substitution_test
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -62,7 +63,7 @@ func TestValidateVariables(t *testing.T) {
 	}, {
 		name: "multiple variables",
 		args: args{
-			input:        "--flag=$(inputs.params.baz) $(input.params.foo)",
+			input:        "--flag=$(inputs.params.baz) $(inputs.params.foo)",
 			prefix:       "inputs.params",
 			locationName: "step",
 			path:         "taskspec.steps",
@@ -95,14 +96,14 @@ func TestValidateVariables(t *testing.T) {
 	}, {
 		name: "undefined variable and defined variable",
 		args: args{
-			input:        "--flag=$(inputs.params.baz) $(input.params.foo)",
+			input:        "--flag=$(inputs.params.baz) $(inputs.params.foo)",
 			prefix:       "inputs.params",
 			locationName: "step",
 			path:         "taskspec.steps",
 			vars:         sets.NewString("foo"),
 		},
 		expectedError: &apis.FieldError{
-			Message: `non-existent variable in "--flag=$(inputs.params.baz) $(input.params.foo)" for step somefield`,
+			Message: `non-existent variable in "--flag=$(inputs.params.baz) $(inputs.params.foo)" for step somefield`,
 			Paths:   []string{"taskspec.steps.somefield"},
 		},
 	}} {
@@ -111,6 +112,229 @@ func TestValidateVariables(t *testing.T) {
 
 			if d := cmp.Diff(got, tc.expectedError, cmp.AllowUnexported(apis.FieldError{})); d != "" {
 				t.Errorf("ValidateVariable() error did not match expected error %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestValidateVariablePs(t *testing.T) {
+	type args struct {
+		input  string
+		prefix string
+		vars   sets.String
+	}
+	for _, tc := range []struct {
+		name          string
+		args          args
+		expectedError *apis.FieldError
+	}{{
+		name: "valid variable",
+		args: args{
+			input:  "--flag=$(inputs.params.baz)",
+			prefix: "inputs.params",
+			vars:   sets.NewString("baz"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid variable with double quote bracket",
+		args: args{
+			input:  "--flag=$(inputs.params[\"baz\"])",
+			prefix: "inputs.params",
+			vars:   sets.NewString("baz"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid variable with single quotebracket",
+		args: args{
+			input:  "--flag=$(inputs.params['baz'])",
+			prefix: "inputs.params",
+			vars:   sets.NewString("baz"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid variable with double quote bracket and dots",
+		args: args{
+			input:  "--flag=$(params[\"foo.bar.baz\"])",
+			prefix: "params",
+			vars:   sets.NewString("foo.bar.baz"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid variable with single quote bracket and dots",
+		args: args{
+			input:  "--flag=$(params['foo.bar.baz'])",
+			prefix: "params",
+			vars:   sets.NewString("foo.bar.baz"),
+		},
+		expectedError: nil,
+	}, {
+		name: "invalid variable with only dots referencing parameters",
+		args: args{
+			input:  "--flag=$(params.foo.bar.baz)",
+			prefix: "params",
+			vars:   sets.NewString("foo.bar.baz"),
+		},
+		expectedError: &apis.FieldError{
+			Message: fmt.Sprintf(`Invalid referencing of parameters in "%s"! Only two dot-separated components after the prefix "%s" are allowed.`, "--flag=$(params.foo.bar.baz)", "params"),
+			Paths:   []string{""},
+		},
+	}, {
+		name: "valid variable with dots referencing resources",
+		args: args{
+			input:  "--flag=$(resources.inputs.foo.bar)",
+			prefix: "resources.(?:inputs|outputs)",
+			vars:   sets.NewString("foo"),
+		},
+		expectedError: nil,
+	}, {
+		name: "invalid variable with dots referencing resources",
+		args: args{
+			input:  "--flag=$(resources.inputs.foo.bar.baz)",
+			prefix: "resources.(?:inputs|outputs)",
+			vars:   sets.NewString("foo.bar"),
+		},
+		expectedError: &apis.FieldError{
+			Message: fmt.Sprintf(`Invalid referencing of parameters in "%s"! Only two dot-separated components after the prefix "%s" are allowed.`, "--flag=$(resources.inputs.foo.bar.baz)", "resources.(?:inputs|outputs)"),
+			Paths:   []string{""},
+		},
+	}, {
+		name: "valid variable contains diffetent chars",
+		args: args{
+			input:  "--flag=$(inputs.params['ba-_9z'])",
+			prefix: "inputs.params",
+			vars:   sets.NewString("ba-_9z"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid variable uid",
+		args: args{
+			input:  "--flag=$(context.taskRun.uid)",
+			prefix: "context.taskRun",
+			vars:   sets.NewString("uid"),
+		},
+		expectedError: nil,
+	}, {
+		name: "multiple variables",
+		args: args{
+			input:  "--flag=$(inputs.params.baz) $(inputs.params.foo)",
+			prefix: "inputs.params",
+			vars:   sets.NewString("baz", "foo"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid usage of an individual attribute of an object param",
+		args: args{
+			input:  "--flag=$(params.objectParam.key1)",
+			prefix: "params.objectParam",
+			vars:   sets.NewString("key1", "key2"),
+		},
+		expectedError: nil,
+	}, {
+		name: "valid usage of multiple individual attributes of an object param",
+		args: args{
+			input:  "--flag=$(params.objectParam.key1) $(params.objectParam.key2)",
+			prefix: "params.objectParam",
+			vars:   sets.NewString("key1", "key2"),
+		},
+		expectedError: nil,
+	}, {
+		name: "different context and prefix",
+		args: args{
+			input:  "--flag=$(something.baz)",
+			prefix: "something",
+			vars:   sets.NewString("baz"),
+		},
+		expectedError: nil,
+	}, {
+		name: "undefined variable",
+		args: args{
+			input:  "--flag=$(inputs.params.baz)",
+			prefix: "inputs.params",
+			vars:   sets.NewString("foo"),
+		},
+		expectedError: &apis.FieldError{
+			Message: `non-existent variable in "--flag=$(inputs.params.baz)"`,
+			Paths:   []string{""},
+		},
+	}, {
+		name: "undefined individual attributes of an object param",
+		args: args{
+			input:  "--flag=$(params.objectParam.key3)",
+			prefix: "params.objectParam",
+			vars:   sets.NewString("key1", "key2"),
+		},
+		expectedError: &apis.FieldError{
+			Message: `non-existent variable in "--flag=$(params.objectParam.key3)"`,
+			Paths:   []string{""},
+		},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := substitution.ValidateVariableP(tc.args.input, tc.args.prefix, tc.args.vars)
+
+			if d := cmp.Diff(got, tc.expectedError, cmp.AllowUnexported(apis.FieldError{})); d != "" {
+				t.Errorf("ValidateVariableP() error did not match expected error %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestValidateEntireVariableProhibitedP(t *testing.T) {
+	type args struct {
+		input  string
+		prefix string
+		vars   sets.String
+	}
+	for _, tc := range []struct {
+		name          string
+		args          args
+		expectedError *apis.FieldError
+	}{{
+		name: "valid usage of an individual key of an object param",
+		args: args{
+			input:  "--flag=$(params.objectParam.key1)",
+			prefix: "params",
+			vars:   sets.NewString("objectParam"),
+		},
+		expectedError: nil,
+	}, {
+		name: "invalid regex",
+		args: args{
+			input:  "--flag=$(params.objectParam.key1)",
+			prefix: `???`,
+			vars:   sets.NewString("objectParam"),
+		},
+		expectedError: &apis.FieldError{
+			Message: "extractEntireVariablesFromString failed : Fail to parse regex pattern: error parsing regexp: invalid nested repetition operator: `???`",
+			Paths:   []string{""},
+		},
+	}, {
+		name: "invalid usage of an entire object param when providing values for strings",
+		args: args{
+			input:  "--flag=$(params.objectParam)",
+			prefix: "params",
+			vars:   sets.NewString("objectParam"),
+		},
+		expectedError: &apis.FieldError{
+			Message: `variable type invalid in "--flag=$(params.objectParam)"`,
+			Paths:   []string{""},
+		},
+	}, {
+		name: "invalid usage of an entire object param when providing values for strings",
+		args: args{
+			input:  "--flag=$(params.objectParam[*])",
+			prefix: "params",
+			vars:   sets.NewString("objectParam"),
+		},
+		expectedError: &apis.FieldError{
+			Message: `variable type invalid in "--flag=$(params.objectParam[*])"`,
+			Paths:   []string{""},
+		},
+	}} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := substitution.ValidateEntireVariableProhibitedP(tc.args.input, tc.args.prefix, tc.args.vars)
+
+			if d := cmp.Diff(got, tc.expectedError, cmp.AllowUnexported(apis.FieldError{})); d != "" {
+				t.Errorf("ValidateEntireVariableProhibitedP() error did not match expected error %s", diff.PrintWantGot(d))
 			}
 		})
 	}

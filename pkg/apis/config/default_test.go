@@ -36,9 +36,10 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 	testCases := []testCase{
 		{
 			expectedConfig: &config.Defaults{
-				DefaultTimeoutMinutes:      50,
-				DefaultServiceAccount:      "tekton",
-				DefaultManagedByLabelValue: "something-else",
+				DefaultTimeoutMinutes:             50,
+				DefaultServiceAccount:             "tekton",
+				DefaultManagedByLabelValue:        "something-else",
+				DefaultMaxMatrixCombinationsCount: 256,
 			},
 			fileName: config.GetDefaultsConfigName(),
 		},
@@ -57,36 +58,73 @@ func TestNewDefaultsFromConfigMap(t *testing.T) {
 						"label": "value2",
 					},
 				},
+				DefaultMaxMatrixCombinationsCount: 256,
 			},
 			fileName: "config-defaults-with-pod-template",
 		},
-		// the github.com/ghodss/yaml package in the vendor directory does not support UnmarshalStrict
-		// update it, switch to UnmarshalStrict in defaults.go, then uncomment these tests
-		// {
-		// 	expectedError: true,
-		// 	fileName:      "config-defaults-timeout-err",
-		// },
-		// {
-		// 	expectedError: true,
-		// 	fileName:      "config-defaults-pod-template-err",
-		// },
+		{
+			expectedError: true,
+			fileName:      "config-defaults-timeout-err",
+		},
+		// Previously the yaml package did not support UnmarshalStrict, though
+		// it's supported now however it may introduce incompatibility, so we decide
+		// to keep the old behavior for now.
+		{
+			expectedError: false,
+			fileName:      "config-defaults-pod-template-err",
+			expectedConfig: &config.Defaults{
+				DefaultTimeoutMinutes:             50,
+				DefaultServiceAccount:             "tekton",
+				DefaultManagedByLabelValue:        config.DefaultManagedByLabelValue,
+				DefaultPodTemplate:                &pod.Template{},
+				DefaultMaxMatrixCombinationsCount: 256,
+			},
+		},
+		{
+			expectedError: false,
+			fileName:      "config-defaults-aa-pod-template-err",
+			expectedConfig: &config.Defaults{
+				DefaultTimeoutMinutes:             50,
+				DefaultServiceAccount:             "tekton",
+				DefaultManagedByLabelValue:        config.DefaultManagedByLabelValue,
+				DefaultAAPodTemplate:              &pod.AffinityAssistantTemplate{},
+				DefaultMaxMatrixCombinationsCount: 256,
+			},
+		},
+		{
+			expectedError: true,
+			fileName:      "config-defaults-matrix-err",
+		},
+		{
+			expectedError: false,
+			fileName:      "config-defaults-matrix",
+			expectedConfig: &config.Defaults{
+				DefaultMaxMatrixCombinationsCount: 1024,
+				DefaultTimeoutMinutes:             60,
+				DefaultServiceAccount:             "default",
+				DefaultManagedByLabelValue:        config.DefaultManagedByLabelValue,
+			},
+		},
 	}
 
 	for _, tc := range testCases {
-		if tc.expectedError {
-			verifyConfigFileWithExpectedError(t, tc.fileName)
-		} else {
-			verifyConfigFileWithExpectedConfig(t, tc.fileName, tc.expectedConfig)
-		}
+		t.Run(tc.fileName, func(t *testing.T) {
+			if tc.expectedError {
+				verifyConfigFileWithExpectedError(t, tc.fileName)
+			} else {
+				verifyConfigFileWithExpectedConfig(t, tc.fileName, tc.expectedConfig)
+			}
+		})
 	}
 }
 
 func TestNewDefaultsFromEmptyConfigMap(t *testing.T) {
 	DefaultsConfigEmptyName := "config-defaults-empty"
 	expectedConfig := &config.Defaults{
-		DefaultTimeoutMinutes:      60,
-		DefaultManagedByLabelValue: "tekton-pipelines",
-		DefaultServiceAccount:      "default",
+		DefaultTimeoutMinutes:             60,
+		DefaultManagedByLabelValue:        "tekton-pipelines",
+		DefaultServiceAccount:             "default",
+		DefaultMaxMatrixCombinationsCount: 256,
 	}
 	verifyConfigFileWithExpectedConfig(t, DefaultsConfigEmptyName, expectedConfig)
 }
@@ -232,7 +270,7 @@ func verifyConfigFileWithExpectedConfig(t *testing.T, fileName string, expectedC
 	t.Helper()
 	cm := test.ConfigMapFromTestFile(t, fileName)
 	if Defaults, err := config.NewDefaultsFromConfigMap(cm); err == nil {
-		if d := cmp.Diff(Defaults, expectedConfig); d != "" {
+		if d := cmp.Diff(expectedConfig, Defaults); d != "" {
 			t.Errorf("Diff:\n%s", diff.PrintWantGot(d))
 		}
 	} else {

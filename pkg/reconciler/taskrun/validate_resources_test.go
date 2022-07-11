@@ -20,13 +20,11 @@ import (
 	"context"
 	"testing"
 
-	"github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
-	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	resourcev1alpha1 "github.com/tektoncd/pipeline/pkg/apis/resource/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 )
 
@@ -38,10 +36,8 @@ func TestValidateResolvedTaskResources_ValidResources(t *testing.T) {
 		},
 		Spec: v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "myimage",
-					Command: []string{"mycmd"},
-				},
+				Image:   "myimage",
+				Command: []string{"mycmd"},
 			}},
 			Resources: &v1beta1.TaskResources{
 				Inputs: []v1beta1.TaskResource{
@@ -84,7 +80,7 @@ func TestValidateResolvedTaskResources_ValidResources(t *testing.T) {
 		Inputs: map[string]*resourcev1alpha1.PipelineResource{
 			"resource-to-build": {
 				ObjectMeta: metav1.ObjectMeta{Name: "example-resource"},
-				Spec: v1alpha1.PipelineResourceSpec{
+				Spec: resourcev1alpha1.PipelineResourceSpec{
 					Type: resourcev1alpha1.PipelineResourceTypeGit,
 					Params: []v1beta1.ResourceParam{{
 						Name:  "foo",
@@ -94,7 +90,7 @@ func TestValidateResolvedTaskResources_ValidResources(t *testing.T) {
 			},
 			"optional-resource-to-build": {
 				ObjectMeta: metav1.ObjectMeta{Name: "example-resource"},
-				Spec: v1alpha1.PipelineResourceSpec{
+				Spec: resourcev1alpha1.PipelineResourceSpec{
 					Type: resourcev1alpha1.PipelineResourceTypeGit,
 					Params: []v1beta1.ResourceParam{{
 						Name:  "foo",
@@ -106,19 +102,19 @@ func TestValidateResolvedTaskResources_ValidResources(t *testing.T) {
 		Outputs: map[string]*resourcev1alpha1.PipelineResource{
 			"resource-to-provide": {
 				ObjectMeta: metav1.ObjectMeta{Name: "example-image"},
-				Spec: v1alpha1.PipelineResourceSpec{
+				Spec: resourcev1alpha1.PipelineResourceSpec{
 					Type: resourcev1alpha1.PipelineResourceTypeImage,
 				},
 			},
 			"optional-resource-to-provide": {
 				ObjectMeta: metav1.ObjectMeta{Name: "example-image"},
-				Spec: v1alpha1.PipelineResourceSpec{
+				Spec: resourcev1alpha1.PipelineResourceSpec{
 					Type: resourcev1alpha1.PipelineResourceTypeImage,
 				},
 			},
 		},
 	}
-	if err := ValidateResolvedTaskResources(ctx, []v1beta1.Param{}, rtr); err != nil {
+	if err := ValidateResolvedTaskResources(ctx, []v1beta1.Param{}, []v1beta1.Param{}, rtr); err != nil {
 		t.Fatalf("Did not expect to see error when validating valid resolved TaskRun but saw %v", err)
 	}
 }
@@ -129,10 +125,8 @@ func TestValidateResolvedTaskResources_ValidParams(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
 		Spec: v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "myimage",
-					Command: []string{"mycmd"},
-				},
+				Image:   "myimage",
+				Command: []string{"mycmd"},
 			}},
 			Params: []v1beta1.ParamSpec{
 				{
@@ -142,6 +136,17 @@ func TestValidateResolvedTaskResources_ValidParams(t *testing.T) {
 				{
 					Name: "bar",
 					Type: v1beta1.ParamTypeString,
+				},
+				{
+					Name: "zoo",
+					Type: v1beta1.ParamTypeString,
+				}, {
+					Name: "myobj",
+					Type: v1beta1.ParamTypeObject,
+					Properties: map[string]v1beta1.PropertySpec{
+						"key1": {},
+						"key2": {},
+					},
 				},
 			},
 		},
@@ -155,8 +160,19 @@ func TestValidateResolvedTaskResources_ValidParams(t *testing.T) {
 	}, {
 		Name:  "bar",
 		Value: *v1beta1.NewArrayOrString("somethinggood"),
+	}, {
+		Name: "myobj",
+		Value: *v1beta1.NewObject(map[string]string{
+			"key1":      "val1",
+			"key2":      "val2",
+			"extra_key": "val3",
+		}),
 	}}
-	if err := ValidateResolvedTaskResources(ctx, p, rtr); err != nil {
+	m := []v1beta1.Param{{
+		Name:  "zoo",
+		Value: *v1beta1.NewArrayOrString("a", "b", "c"),
+	}}
+	if err := ValidateResolvedTaskResources(ctx, p, m, rtr); err != nil {
 		t.Fatalf("Did not expect to see error when validating TaskRun with correct params but saw %v", err)
 	}
 
@@ -166,7 +182,11 @@ func TestValidateResolvedTaskResources_ValidParams(t *testing.T) {
 			Name:  "extra",
 			Value: *v1beta1.NewArrayOrString("i am an extra param"),
 		}
-		if err := ValidateResolvedTaskResources(ctx, append(p, extra), rtr); err != nil {
+		extraarray := v1beta1.Param{
+			Name:  "extraarray",
+			Value: *v1beta1.NewArrayOrString("i", "am", "an", "extra", "array", "param"),
+		}
+		if err := ValidateResolvedTaskResources(ctx, append(p, extra), append(m, extraarray), rtr); err != nil {
 			t.Fatalf("Did not expect to see error when validating TaskRun with correct params but saw %v", err)
 		}
 	})
@@ -178,15 +198,24 @@ func TestValidateResolvedTaskResources_InvalidParams(t *testing.T) {
 		ObjectMeta: metav1.ObjectMeta{Name: "foo"},
 		Spec: v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Image:   "myimage",
-					Command: []string{"mycmd"},
-				},
+				Image:   "myimage",
+				Command: []string{"mycmd"},
 			}},
 			Params: []v1beta1.ParamSpec{
 				{
 					Name: "foo",
 					Type: v1beta1.ParamTypeString,
+				}, {
+					Name: "bar",
+					Type: v1beta1.ParamTypeArray,
+				},
+				{
+					Name: "myobj",
+					Type: v1beta1.ParamTypeObject,
+					Properties: map[string]v1beta1.PropertySpec{
+						"key1": {},
+						"key2": {},
+					},
 				},
 			},
 		},
@@ -195,6 +224,7 @@ func TestValidateResolvedTaskResources_InvalidParams(t *testing.T) {
 		name   string
 		rtr    *resources.ResolvedTaskResources
 		params []v1beta1.Param
+		matrix []v1beta1.Param
 	}{{
 		name: "missing-params",
 		rtr: &resources.ResolvedTaskResources{
@@ -204,10 +234,45 @@ func TestValidateResolvedTaskResources_InvalidParams(t *testing.T) {
 			Name:  "foobar",
 			Value: *v1beta1.NewArrayOrString("somethingfun"),
 		}},
-	}}
+		matrix: []v1beta1.Param{{
+			Name:  "barfoo",
+			Value: *v1beta1.NewArrayOrString("bar", "foo"),
+		}},
+	}, {
+		name: "invalid-type-in-params",
+		rtr: &resources.ResolvedTaskResources{
+			TaskSpec: &task.Spec,
+		},
+		params: []v1beta1.Param{{
+			Name:  "foo",
+			Value: *v1beta1.NewArrayOrString("bar", "foo"),
+		}},
+	}, {
+		name: "invalid-type-in-matrix",
+		rtr: &resources.ResolvedTaskResources{
+			TaskSpec: &task.Spec,
+		},
+		matrix: []v1beta1.Param{{
+			Name:  "bar",
+			Value: *v1beta1.NewArrayOrString("bar", "foo"),
+		}},
+	}, {
+		name: "missing object param keys",
+		rtr: &resources.ResolvedTaskResources{
+			TaskSpec: &task.Spec,
+		},
+		params: []v1beta1.Param{{
+			Name: "myobj",
+			Value: *v1beta1.NewObject(map[string]string{
+				"key1":    "val1",
+				"misskey": "val2",
+			}),
+		}},
+	},
+	}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := ValidateResolvedTaskResources(ctx, tc.params, tc.rtr); err == nil {
+			if err := ValidateResolvedTaskResources(ctx, tc.params, tc.matrix, tc.rtr); err == nil {
 				t.Errorf("Expected to see error when validating invalid resolved TaskRun with wrong params but saw none")
 			}
 		})
@@ -415,7 +480,7 @@ func TestValidateResolvedTaskResources_InvalidResources(t *testing.T) {
 
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := ValidateResolvedTaskResources(ctx, []v1beta1.Param{}, tc.rtr); err == nil {
+			if err := ValidateResolvedTaskResources(ctx, []v1beta1.Param{}, []v1beta1.Param{}, tc.rtr); err == nil {
 				t.Errorf("Expected to see error when validating invalid resolved TaskRun but saw none")
 			}
 		})
@@ -432,13 +497,9 @@ func TestValidateOverrides(t *testing.T) {
 		name: "valid stepOverrides",
 		ts: &v1beta1.TaskSpec{
 			Steps: []v1beta1.Step{{
-				Container: corev1.Container{
-					Name: "step1",
-				},
+				Name: "step1",
 			}, {
-				Container: corev1.Container{
-					Name: "step2",
-				},
+				Name: "step2",
 			}},
 		},
 		trs: &v1beta1.TaskRunSpec{
@@ -450,13 +511,9 @@ func TestValidateOverrides(t *testing.T) {
 		name: "valid sidecarOverrides",
 		ts: &v1beta1.TaskSpec{
 			Sidecars: []v1beta1.Sidecar{{
-				Container: corev1.Container{
-					Name: "step1",
-				},
+				Name: "step1",
 			}, {
-				Container: corev1.Container{
-					Name: "step2",
-				},
+				Name: "step2",
 			}},
 		},
 		trs: &v1beta1.TaskRunSpec{
@@ -485,10 +542,279 @@ func TestValidateOverrides(t *testing.T) {
 	}}
 	for _, tc := range tcs {
 		t.Run(tc.name, func(t *testing.T) {
-			err := validateOverrides(context.Background(), tc.ts, tc.trs)
+			err := validateOverrides(tc.ts, tc.trs)
 			if (err != nil) != tc.wantErr {
 				t.Errorf("expected err: %t, but got err %s", tc.wantErr, err)
 			}
 		})
 	}
+}
+
+func TestValidateResult(t *testing.T) {
+	tcs := []struct {
+		name    string
+		tr      *v1beta1.TaskRun
+		rtr     *v1beta1.TaskSpec
+		wantErr bool
+	}{{
+		name: "valid taskrun spec results",
+		tr: &v1beta1.TaskRun{
+			Spec: v1beta1.TaskRunSpec{
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{
+						{
+							Name: "string-result",
+							Type: v1beta1.ResultsTypeString,
+						},
+						{
+							Name: "array-result",
+							Type: v1beta1.ResultsTypeArray,
+						},
+						{
+							Name:       "object-result",
+							Type:       v1beta1.ResultsTypeObject,
+							Properties: map[string]v1beta1.PropertySpec{"hello": {Type: "string"}},
+						},
+					},
+				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					TaskRunResults: []v1beta1.TaskRunResult{
+						{
+							Name:  "string-result",
+							Type:  v1beta1.ResultsTypeString,
+							Value: *v1beta1.NewArrayOrString("hello"),
+						},
+						{
+							Name:  "array-result",
+							Type:  v1beta1.ResultsTypeArray,
+							Value: *v1beta1.NewArrayOrString("hello", "world"),
+						},
+						{
+							Name:  "object-result",
+							Type:  v1beta1.ResultsTypeObject,
+							Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+						},
+					},
+				},
+			},
+		},
+		rtr: &v1beta1.TaskSpec{
+			Results: []v1beta1.TaskResult{},
+		},
+		wantErr: false,
+	}, {
+		name: "valid taskspec results",
+		tr: &v1beta1.TaskRun{
+			Spec: v1beta1.TaskRunSpec{
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{
+						{
+							Name: "string-result",
+							Type: v1beta1.ResultsTypeString,
+						},
+						{
+							Name: "array-result",
+							Type: v1beta1.ResultsTypeArray,
+						},
+						{
+							Name: "object-result",
+							Type: v1beta1.ResultsTypeObject,
+						},
+					},
+				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					TaskRunResults: []v1beta1.TaskRunResult{
+						{
+							Name:  "string-result",
+							Type:  v1beta1.ResultsTypeString,
+							Value: *v1beta1.NewArrayOrString("hello"),
+						},
+						{
+							Name:  "array-result",
+							Type:  v1beta1.ResultsTypeArray,
+							Value: *v1beta1.NewArrayOrString("hello", "world"),
+						},
+						{
+							Name:  "object-result",
+							Type:  v1beta1.ResultsTypeObject,
+							Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+						},
+					},
+				},
+			},
+		},
+		rtr: &v1beta1.TaskSpec{
+			Results: []v1beta1.TaskResult{},
+		},
+		wantErr: false,
+	}, {
+		name: "invalid taskrun spec results types",
+		tr: &v1beta1.TaskRun{
+			Spec: v1beta1.TaskRunSpec{
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{
+						{
+							Name: "string-result",
+							Type: v1beta1.ResultsTypeString,
+						},
+						{
+							Name: "array-result",
+							Type: v1beta1.ResultsTypeArray,
+						},
+						{
+							Name:       "object-result",
+							Type:       v1beta1.ResultsTypeObject,
+							Properties: map[string]v1beta1.PropertySpec{"hello": {Type: "string"}},
+						},
+					},
+				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					TaskRunResults: []v1beta1.TaskRunResult{
+						{
+							Name:  "string-result",
+							Type:  v1beta1.ResultsTypeArray,
+							Value: *v1beta1.NewArrayOrString("hello", "world"),
+						},
+						{
+							Name:  "array-result",
+							Type:  v1beta1.ResultsTypeObject,
+							Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+						},
+						{
+							Name:  "object-result",
+							Type:  v1beta1.ResultsTypeString,
+							Value: *v1beta1.NewArrayOrString("hello"),
+						},
+					},
+				},
+			},
+		},
+		rtr: &v1beta1.TaskSpec{
+			Results: []v1beta1.TaskResult{},
+		},
+		wantErr: true,
+	}, {
+		name: "invalid taskspec results types",
+		tr: &v1beta1.TaskRun{
+			Spec: v1beta1.TaskRunSpec{
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{},
+				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					TaskRunResults: []v1beta1.TaskRunResult{
+						{
+							Name:  "string-result",
+							Type:  v1beta1.ResultsTypeArray,
+							Value: *v1beta1.NewArrayOrString("hello", "world"),
+						},
+						{
+							Name:  "array-result",
+							Type:  v1beta1.ResultsTypeObject,
+							Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+						},
+						{
+							Name:  "object-result",
+							Type:  v1beta1.ResultsTypeString,
+							Value: *v1beta1.NewArrayOrString("hello"),
+						},
+					},
+				},
+			},
+		},
+		rtr: &v1beta1.TaskSpec{
+			Results: []v1beta1.TaskResult{
+				{
+					Name: "string-result",
+					Type: v1beta1.ResultsTypeString,
+				},
+				{
+					Name: "array-result",
+					Type: v1beta1.ResultsTypeArray,
+				},
+				{
+					Name:       "object-result",
+					Type:       v1beta1.ResultsTypeObject,
+					Properties: map[string]v1beta1.PropertySpec{"hello": {Type: "string"}},
+				},
+			},
+		},
+		wantErr: true,
+	}, {
+		name: "invalid taskrun spec results object properties",
+		tr: &v1beta1.TaskRun{
+			Spec: v1beta1.TaskRunSpec{
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{
+						{
+							Name:       "object-result",
+							Type:       v1beta1.ResultsTypeObject,
+							Properties: map[string]v1beta1.PropertySpec{"world": {Type: "string"}},
+						},
+					},
+				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					TaskRunResults: []v1beta1.TaskRunResult{
+						{
+							Name:  "object-result",
+							Type:  v1beta1.ResultsTypeObject,
+							Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+						},
+					},
+				},
+			},
+		},
+		rtr: &v1beta1.TaskSpec{
+			Results: []v1beta1.TaskResult{},
+		},
+		wantErr: true,
+	}, {
+		name: "invalid taskspec results object properties",
+		tr: &v1beta1.TaskRun{
+			Spec: v1beta1.TaskRunSpec{
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{},
+				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					TaskRunResults: []v1beta1.TaskRunResult{
+						{
+							Name:  "object-result",
+							Type:  v1beta1.ResultsTypeObject,
+							Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+						},
+					},
+				},
+			},
+		},
+		rtr: &v1beta1.TaskSpec{
+			Results: []v1beta1.TaskResult{
+				{
+					Name:       "object-result",
+					Type:       v1beta1.ResultsTypeObject,
+					Properties: map[string]v1beta1.PropertySpec{"world": {Type: "string"}},
+				},
+			},
+		},
+		wantErr: true,
+	}}
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			err := validateTaskRunResults(tc.tr, tc.rtr)
+			if (err != nil) != tc.wantErr {
+				t.Errorf("expected err: %t, but got err %s", tc.wantErr, err)
+			}
+		})
+	}
+
 }

@@ -171,19 +171,6 @@ func TestPipelineTask_ValidateCustomTask(t *testing.T) {
 			Paths:   []string{"taskRef.apiVersion"},
 		},
 	}, {
-		name: "custom task doesn't support conditions",
-		task: PipelineTask{
-			Name: "foo",
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition",
-			}},
-			TaskRef: &TaskRef{APIVersion: "example.dev/v0", Kind: "Example"},
-		},
-		expectedError: apis.FieldError{
-			Message: `invalid value: custom tasks do not support conditions - use when expressions instead`,
-			Paths:   []string{"conditions"},
-		},
-	}, {
 		name: "custom task doesn't support pipeline resources",
 		task: PipelineTask{
 			Name:      "foo",
@@ -243,8 +230,10 @@ func TestPipelineTask_ValidateBundle_Failure(t *testing.T) {
 
 func TestPipelineTask_ValidateRegularTask_Success(t *testing.T) {
 	tests := []struct {
-		name  string
-		tasks PipelineTask
+		name            string
+		tasks           PipelineTask
+		enableAPIFields bool
+		enableBundles   bool
 	}{{
 		name: "pipeline task - valid taskRef name",
 		tasks: PipelineTask{
@@ -257,10 +246,40 @@ func TestPipelineTask_ValidateRegularTask_Success(t *testing.T) {
 			Name:     "foo",
 			TaskSpec: &EmbeddedTask{TaskSpec: getTaskSpec()},
 		},
+	}, {
+		name: "pipeline task - use of resolver with the feature flag set",
+		tasks: PipelineTask{
+			TaskRef: &TaskRef{Name: "boo", ResolverRef: ResolverRef{Resolver: "bar"}},
+		},
+		enableAPIFields: true,
+	}, {
+		name: "pipeline task - use of resource with the feature flag set",
+		tasks: PipelineTask{
+			TaskRef: &TaskRef{Name: "boo", ResolverRef: ResolverRef{Resource: []ResolverParam{{}}}},
+		},
+		enableAPIFields: true,
+	}, {
+		name: "pipeline task - use of bundle with the feature flag set",
+		tasks: PipelineTask{
+			Name:    "foo",
+			TaskRef: &TaskRef{Name: "bar", Bundle: "docker.io/foo"},
+		},
+		enableBundles: true,
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.tasks.validateTask(context.Background())
+			ctx := context.Background()
+			cfg := &config.Config{
+				FeatureFlags: &config.FeatureFlags{},
+			}
+			if tt.enableAPIFields {
+				cfg.FeatureFlags.EnableAPIFields = config.AlphaAPIFields
+			}
+			if tt.enableBundles {
+				cfg.FeatureFlags.EnableTektonOCIBundles = true
+			}
+			ctx = config.ToContext(ctx, cfg)
+			err := tt.tasks.validateTask(ctx)
 			if err != nil {
 				t.Errorf("PipelineTask.validateTask() returned error for valid pipeline task: %v", err)
 			}
@@ -310,6 +329,18 @@ func TestPipelineTask_ValidateRegularTask_Failure(t *testing.T) {
 			TaskRef: &TaskRef{Name: "bar", Bundle: "docker.io/foo"},
 		},
 		expectedError: *apis.ErrDisallowedFields("taskref.bundle"),
+	}, {
+		name: "pipeline task - use of resolver without the feature flag set",
+		task: PipelineTask{
+			TaskRef: &TaskRef{Name: "boo", ResolverRef: ResolverRef{Resolver: "bar"}},
+		},
+		expectedError: *apis.ErrDisallowedFields("taskref.resolver"),
+	}, {
+		name: "pipeline task - use of resource without the feature flag set",
+		task: PipelineTask{
+			TaskRef: &TaskRef{Name: "boo", ResolverRef: ResolverRef{Resource: []ResolverParam{{}}}},
+		},
+		expectedError: *apis.ErrDisallowedFields("taskref.resource"),
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -439,6 +470,24 @@ func TestPipelineTaskList_Deps(t *testing.T) {
 			"task-2": {"task-1"},
 		},
 	}, {
+		name: "valid pipeline with resource deps - Task Results in Matrix",
+		tasks: []PipelineTask{{
+			Name: "task-1",
+		}, {
+			Name: "task-2",
+			Matrix: []Param{{
+				Value: ArrayOrString{
+					Type: ParamTypeArray,
+					ArrayVal: []string{
+						"$(tasks.task-1.results.result)",
+					},
+				}},
+			}},
+		},
+		expectedDeps: map[string][]string{
+			"task-2": {"task-1"},
+		},
+	}, {
 		name: "valid pipeline with resource deps - When Expressions",
 		tasks: []PipelineTask{{
 			Name: "task-1",
@@ -484,12 +533,25 @@ func TestPipelineTaskList_Deps(t *testing.T) {
 				Operator: "in",
 				Values:   []string{"foo"},
 			}},
+		}, {
+			Name:     "task-6",
+			RunAfter: []string{"task-1"},
+			Matrix: []Param{{
+				Value: ArrayOrString{
+					Type: ParamTypeArray,
+					ArrayVal: []string{
+						"$(tasks.task-2.results.result)",
+						"$(tasks.task-5.results.result)",
+					},
+				}},
+			},
 		}},
 		expectedDeps: map[string][]string{
 			"task-2": {"task-1"},
 			"task-3": {"task-1", "task-2"},
 			"task-4": {"task-1", "task-3"},
 			"task-5": {"task-1", "task-4"},
+			"task-6": {"task-1", "task-2", "task-5"},
 		},
 	}, {
 		name: "valid pipeline with ordering deps and resource deps - verify unique dependencies",
@@ -546,12 +608,45 @@ func TestPipelineTaskList_Deps(t *testing.T) {
 				Operator: "in",
 				Values:   []string{"foo"},
 			}},
+		}, {
+			Name:     "task-6",
+			RunAfter: []string{"task-1", "task-2", "task-3", "task-4", "task-5"},
+			Resources: &PipelineTaskResources{
+				Inputs: []PipelineTaskInputResource{{
+					From: []string{"task-1", "task-2"},
+				}},
+			},
+			Params: []Param{{
+				Value: ArrayOrString{
+					Type:      "string",
+					StringVal: "$(tasks.task-4.results.result)",
+				}},
+			},
+			WhenExpressions: WhenExpressions{{
+				Input:    "$(tasks.task-3.results.result)",
+				Operator: "in",
+				Values:   []string{"foo"},
+			}, {
+				Input:    "$(tasks.task-4.results.result)",
+				Operator: "in",
+				Values:   []string{"foo"},
+			}},
+			Matrix: []Param{{
+				Value: ArrayOrString{
+					Type: ParamTypeArray,
+					ArrayVal: []string{
+						"$(tasks.task-2.results.result)",
+						"$(tasks.task-5.results.result)",
+					},
+				}},
+			},
 		}},
 		expectedDeps: map[string][]string{
 			"task-2": {"task-1"},
 			"task-3": {"task-1", "task-2"},
 			"task-4": {"task-1", "task-2", "task-3"},
 			"task-5": {"task-1", "task-2", "task-3", "task-4"},
+			"task-6": {"task-1", "task-2", "task-3", "task-4", "task-5"},
 		},
 	}}
 	for _, tc := range pipelines {
@@ -653,9 +748,10 @@ func TestPipelineTaskList_Validate(t *testing.T) {
 
 func TestPipelineTask_validateMatrix(t *testing.T) {
 	tests := []struct {
-		name     string
-		pt       *PipelineTask
-		wantErrs *apis.FieldError
+		name           string
+		pt             *PipelineTask
+		embeddedStatus string
+		wantErrs       *apis.FieldError
 	}{{
 		name: "parameter duplicated in matrix and params",
 		pt: &PipelineTask{
@@ -711,22 +807,241 @@ func TestPipelineTask_validateMatrix(t *testing.T) {
 				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(tasks.foo-task.results.a-result)"}},
 			}},
 		},
+	}, {
+		name: "count of combinations of parameters in the matrix exceeds the maximum",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "platform", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"linux", "mac", "windows"}},
+			}, {
+				Name: "browser", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"chrome", "firefox", "safari"}},
+			}},
+		},
 		wantErrs: &apis.FieldError{
-			Message: "invalid value: result references are not allowed in parameters in a matrix",
-			Paths:   []string{"matrix[a-param].value"},
+			Message: "expected 0 <= 9 <= 4",
+			Paths:   []string{"matrix"},
+		},
+	}, {
+		name: "count of combinations of parameters in the matrix equals the maximum",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "platform", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"linux", "mac"}},
+			}, {
+				Name: "browser", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"chrome", "firefox"}},
+			}},
+		},
+	}, {
+		name: "pipeline has a matrix but embedded status is full",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foobar", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
+			}, {
+				Name: "barfoo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"bar", "foo"}},
+			}},
+		},
+		embeddedStatus: config.FullEmbeddedStatus,
+		wantErrs: &apis.FieldError{
+			Message: "matrix requires \"embedded-status\" feature gate to be \"minimal\" but it is \"full\"",
+		},
+	}, {
+		name: "pipeline has a matrix but embedded status is both",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foobar", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
+			}, {
+				Name: "barfoo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"bar", "foo"}},
+			}},
+		},
+		embeddedStatus: config.BothEmbeddedStatus,
+		wantErrs: &apis.FieldError{
+			Message: "matrix requires \"embedded-status\" feature gate to be \"minimal\" but it is \"both\"",
 		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			if tt.embeddedStatus == "" {
+				tt.embeddedStatus = config.MinimalEmbeddedStatus
+			}
 			featureFlags, _ := config.NewFeatureFlagsFromMap(map[string]string{
 				"enable-api-fields": "alpha",
+				"embedded-status":   tt.embeddedStatus,
 			})
+			defaults := &config.Defaults{
+				DefaultMaxMatrixCombinationsCount: 4,
+			}
 			cfg := &config.Config{
 				FeatureFlags: featureFlags,
+				Defaults:     defaults,
 			}
 			ctx := config.ToContext(context.Background(), cfg)
 			if d := cmp.Diff(tt.wantErrs.Error(), tt.pt.validateMatrix(ctx).Error()); d != "" {
 				t.Errorf("PipelineTask.validateMatrix() errors diff %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestPipelineTask_GetMatrixCombinationsCount(t *testing.T) {
+	tests := []struct {
+		name                    string
+		pt                      *PipelineTask
+		matrixCombinationsCount int
+	}{{
+		name: "combinations count is zero",
+		pt: &PipelineTask{
+			Name: "task",
+		},
+		matrixCombinationsCount: 0,
+	}, {
+		name: "combinations count is one from one parameter",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"foo"}},
+			}},
+		},
+		matrixCombinationsCount: 1,
+	}, {
+		name: "combinations count is one from two parameters",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"foo"}},
+			}, {
+				Name: "bar", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"bar"}},
+			}},
+		},
+		matrixCombinationsCount: 1,
+	}, {
+		name: "combinations count is two from one parameter",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"foo", "bar"}},
+			}},
+		},
+		matrixCombinationsCount: 2,
+	}, {
+		name: "combinations count is nine",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"f", "o", "o"}},
+			}, {
+				Name: "bar", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"b", "a", "r"}},
+			}},
+		},
+		matrixCombinationsCount: 9,
+	}, {
+		name: "combinations count is large",
+		pt: &PipelineTask{
+			Name: "task",
+			Matrix: []Param{{
+				Name: "foo", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"f", "o", "o"}},
+			}, {
+				Name: "bar", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"b", "a", "r"}},
+			}, {
+				Name: "quz", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"q", "u", "x"}},
+			}, {
+				Name: "xyzzy", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"x", "y", "z", "z", "y"}},
+			}},
+		},
+		matrixCombinationsCount: 135,
+	}}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if d := cmp.Diff(tt.matrixCombinationsCount, tt.pt.GetMatrixCombinationsCount()); d != "" {
+				t.Errorf("PipelineTask.GetMatrixCombinationsCount() errors diff %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestPipelineTask_ValidateEmbeddedOrType(t *testing.T) {
+	testCases := []struct {
+		name          string
+		pt            PipelineTask
+		expectedError *apis.FieldError
+	}{
+		{
+			name: "just apiVersion and kind",
+			pt: PipelineTask{
+				TaskSpec: &EmbeddedTask{
+					TypeMeta: runtime.TypeMeta{
+						APIVersion: "something",
+						Kind:       "whatever",
+					},
+				},
+			},
+		}, {
+			name: "just steps",
+			pt: PipelineTask{
+				TaskSpec: &EmbeddedTask{
+					TaskSpec: TaskSpec{
+						Steps: []Step{{
+							Name:  "foo",
+							Image: "bar",
+						}},
+					},
+				},
+			},
+		}, {
+			name: "apiVersion and steps",
+			pt: PipelineTask{
+				TaskSpec: &EmbeddedTask{
+					TypeMeta: runtime.TypeMeta{
+						APIVersion: "something",
+					},
+					TaskSpec: TaskSpec{
+						Steps: []Step{{
+							Name:  "foo",
+							Image: "bar",
+						}},
+					},
+				},
+			},
+			expectedError: &apis.FieldError{
+				Message: "taskSpec.apiVersion cannot be specified when using taskSpec.steps",
+				Paths:   []string{"taskSpec.apiVersion"},
+			},
+		}, {
+			name: "kind and steps",
+			pt: PipelineTask{
+				TaskSpec: &EmbeddedTask{
+					TypeMeta: runtime.TypeMeta{
+						Kind: "something",
+					},
+					TaskSpec: TaskSpec{
+						Steps: []Step{{
+							Name:  "foo",
+							Image: "bar",
+						}},
+					},
+				},
+			},
+			expectedError: &apis.FieldError{
+				Message: "taskSpec.kind cannot be specified when using taskSpec.steps",
+				Paths:   []string{"taskSpec.kind"},
+			},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			err := tc.pt.validateEmbeddedOrType()
+			if err == nil && tc.expectedError != nil {
+				t.Fatalf("PipelineTask.validateEmbeddedOrType() did not return expected error '%s'", tc.expectedError.Error())
+			}
+			if err != nil {
+				if tc.expectedError == nil {
+					t.Fatalf("PipelineTask.validateEmbeddedOrType() returned unexpected error '%s'", err.Error())
+				}
+				if d := cmp.Diff(tc.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
+					t.Errorf("PipelineTask.validateEmbeddedOrType() errors diff %s", diff.PrintWantGot(d))
+				}
 			}
 		})
 	}

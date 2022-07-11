@@ -32,7 +32,7 @@ This guide explains how to install Tekton Pipelines. It covers the following top
 
 ## Before you begin
 
-1. You must have a Kubernetes cluster running version 1.20 or later.
+1. You must have a Kubernetes cluster running version 1.21 or later.
 
    If you don't already have a cluster, you can create one for testing with `kind`.
    [Install `kind`](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) and create a cluster by running [`kind create cluster`](https://kind.sigs.k8s.io/docs/user/quick-start/#creating-a-cluster). This
@@ -318,6 +318,8 @@ The example below customizes the following:
 - the default Pod template to include a node selector to select the node where the Pod will be scheduled by default. A list of supported fields is available [here](https://github.com/tektoncd/pipeline/blob/main/docs/podtemplates.md#supported-fields).
   For more information, see [`PodTemplate` in `TaskRuns`](./taskruns.md#specifying-a-pod-template) or [`PodTemplate` in `PipelineRuns`](./pipelineruns.md#specifying-a-pod-template).
 - the default `Workspace` configuration can be set for any `Workspaces` that a Task declares but that a TaskRun does not explicitly provide
+- the default maximum combinations of `Parameters` in a `Matrix` that can be used to fan out a `PipelineTask`. For 
+more information, see [`Matrix`](matrix.md).
 
 ```yaml
 apiVersion: v1
@@ -333,6 +335,7 @@ data:
   default-managed-by-label-value: "my-tekton-installation"
   default-task-run-workspace-binding: |
     emptyDir: {}
+  default-max-matrix-combinations-count: "1024"
 ```
 
 **Note:** The `_example` key in the provided [config-defaults.yaml](./../config/config-defaults.yaml)
@@ -389,7 +392,7 @@ features](#alpha-features) to be used.
 - `embedded-status`: set this flag to "full" to enable full embedding of `TaskRun` and `Run` statuses in the 
  `PipelineRun` status. Set it to "minimal" to populate the `ChildReferences` field in the `PipelineRun` status with
   name, kind, and API version information for each `TaskRun` and `Run` in the `PipelineRun` instead. Set it to "both" to 
-  do both. For more information, see [Configuring usage of `TaskRun` and `Run` embedded statuses](pipelineruns.md#configuring-usage-of-taskrun-and-run-embedded-statuses). **NOTE**: This functionality is not yet active.
+  do both. For more information, see [Configuring usage of `TaskRun` and `Run` embedded statuses](pipelineruns.md#configuring-usage-of-taskrun-and-run-embedded-statuses).
 
 For example:
 
@@ -416,15 +419,14 @@ Features currently in "alpha" are:
 | [`Runs` and `Custom Tasks`](./runs.md)                                                                | [TEP-0002](https://github.com/tektoncd/community/blob/main/teps/0002-custom-tasks.md)                                | [v0.19.0](https://github.com/tektoncd/pipeline/releases/tag/v0.19.0) | `enable-custom-tasks`       |
 | [Isolated `Step` & `Sidecar` `Workspaces`](./workspaces.md#isolated-workspaces)                       | [TEP-0029](https://github.com/tektoncd/community/blob/main/teps/0029-step-workspaces.md)                             | [v0.24.0](https://github.com/tektoncd/pipeline/releases/tag/v0.24.0) |                             |
 | [Hermetic Execution Mode](./hermetic.md)                                                              | [TEP-0025](https://github.com/tektoncd/community/blob/main/teps/0025-hermekton.md)                                   | [v0.25.0](https://github.com/tektoncd/pipeline/releases/tag/v0.25.0) |                             |
-| [Graceful Termination](./pipelineruns.md#gracefully-cancelling-a-pipelinerun)                         | [TEP-0058](https://github.com/tektoncd/community/blob/main/teps/0058-graceful-pipeline-run-termination.md)           | [v0.25.0](https://github.com/tektoncd/pipeline/releases/tag/v0.25.0) |                             |
-| [`PipelineRun` Timeouts](./pipelineruns.md#configuring-a-failure-timeout)                             | [TEP-0046](https://github.com/tektoncd/community/blob/main/teps/0046-finallytask-execution-post-timeout.md)          | [v0.25.0](https://github.com/tektoncd/pipeline/releases/tag/v0.25.0) |                             |
-| [Implicit `Parameters`](./taskruns.md#implicit-parameters)                                            | [TEP-0023](https://github.com/tektoncd/community/blob/main/teps/0023-implicit-mapping.md)                            | [v0.28.0](https://github.com/tektoncd/pipeline/releases/tag/v0.28.0) |                             |
+| [Propagated `Parameters`](./taskruns.md#propagated-parameters)                                        | [TEP-0107](https://github.com/tektoncd/community/blob/main/teps/0107-propagating-parameters.md)                      | [v0.36.0](https://github.com/tektoncd/pipeline/releases/tag/v0.36.0) |                             |
 | [Windows Scripts](./tasks.md#windows-scripts)                                                         | [TEP-0057](https://github.com/tektoncd/community/blob/main/teps/0057-windows-support.md)                             | [v0.28.0](https://github.com/tektoncd/pipeline/releases/tag/v0.28.0) |                             |
 | [Remote Tasks](./taskruns.md#remote-tasks) and [Remote Pipelines](./pipelineruns.md#remote-pipelines) | [TEP-0060](https://github.com/tektoncd/community/blob/main/teps/0060-remote-resolutiond.md)                          |                                                                      |                             |
 | [Debug](./debug.md)                                                                                   | [TEP-0042](https://github.com/tektoncd/community/blob/main/teps/0042-taskrun-breakpoint-on-failure.md)               | [v0.26.0](https://github.com/tektoncd/pipeline/releases/tag/v0.26.0) |                             |
 | [Step and Sidecar Overrides](./taskruns.md#overriding-task-steps-and-sidecars)                        | [TEP-0094](https://github.com/tektoncd/community/blob/main/teps/0094-specifying-resource-requirements-at-runtime.md) |                                                                      |                             |
 | [Matrix](./matrix.md)                                                                                 | [TEP-0090](https://github.com/tektoncd/community/blob/main/teps/0090-matrix.md)                                      |                                                                      |                             |
-| [Embedded Statuse](pipelineruns.md#configuring-usage-of-taskrun-and-run-embedded-statuses)                                                                                  | [TEP-0100](https://github.com/tektoncd/community/blob/main/teps/0100-embedded-taskruns-and-runs-status-in-pipelineruns.md)                                      |                                                                      |                             |
+| [Embedded Statuses](pipelineruns.md#configuring-usage-of-taskrun-and-run-embedded-statuses)           | [TEP-0100](https://github.com/tektoncd/community/blob/main/teps/0100-embedded-taskruns-and-runs-status-in-pipelineruns.md) |                                                                |                             |
+| [Task-level Resource Requirements](compute-resources.md#task-level-compute-resources-configuration)   | [TEP-0104](https://github.com/tektoncd/community/blob/main/teps/0104-tasklevel-resource-requirements.md)             |                                                                      |                             |
 
 ## Configuring High Availability
 

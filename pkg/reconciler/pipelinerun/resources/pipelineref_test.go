@@ -20,17 +20,18 @@ import (
 	"context"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
 	"github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
+	"github.com/tektoncd/pipeline/test/parse"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -165,37 +166,6 @@ func TestGetPipelineFunc(t *testing.T) {
 			Bundle: u.Host + "/remote-pipeline-without-defaults",
 		},
 		expected: simplePipelineWithSpecParamAndKind(v1beta1.ParamTypeString, v1beta1.NamespacedTaskKind),
-	}, {
-		name:           "remote-v1alpha1-pipeline-without-defaults",
-		localPipelines: []runtime.Object{simplePipeline()},
-		remotePipelines: []runtime.Object{
-			&v1alpha1.Pipeline{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "simple",
-					Namespace: "default",
-				},
-				TypeMeta: metav1.TypeMeta{
-					Kind:       "Pipeline",
-					APIVersion: "tekton.dev/v1alpha1",
-				},
-				Spec: v1alpha1.PipelineSpec{
-					Tasks: []v1alpha1.PipelineTask{{
-						Name: "something",
-						TaskRef: &v1alpha1.TaskRef{
-							Name: "something",
-						},
-					}},
-					Params: []v1alpha1.ParamSpec{{
-						Name: "foo",
-					}},
-				},
-			},
-		},
-		ref: &v1alpha1.PipelineRef{
-			Name:   "simple",
-			Bundle: u.Host + "/remote-v1alpha1-pipeline-without-defaults",
-		},
-		expected: simplePipelineWithSpecParamKindNoType(v1beta1.ParamTypeString, v1beta1.NamespacedTaskKind),
 	}}
 
 	for _, tc := range testcases {
@@ -213,7 +183,7 @@ func TestGetPipelineFunc(t *testing.T) {
 				t.Fatalf("failed to upload test image: %s", err.Error())
 			}
 
-			fn, err := resources.GetPipelineFunc(ctx, kubeclient, tektonclient, &v1beta1.PipelineRun{
+			fn, err := resources.GetPipelineFunc(ctx, kubeclient, tektonclient, nil, &v1beta1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1beta1.PipelineRunSpec{
 					PipelineRef:        tc.ref,
@@ -277,7 +247,7 @@ func TestGetPipelineFuncSpecAlreadyFetched(t *testing.T) {
 		Spec: pipelineSpec,
 	}
 
-	fn, err := resources.GetPipelineFunc(ctx, kubeclient, tektonclient, pipelineRun)
+	fn, err := resources.GetPipelineFunc(ctx, kubeclient, tektonclient, nil, pipelineRun)
 	if err != nil {
 		t.Fatalf("failed to get pipeline fn: %s", err.Error())
 	}
@@ -288,6 +258,65 @@ func TestGetPipelineFuncSpecAlreadyFetched(t *testing.T) {
 
 	if diff := cmp.Diff(actualPipeline, expectedPipeline); expectedPipeline != nil && diff != "" {
 		t.Error(diff)
+	}
+}
+
+func TestGetPipelineFunc_RemoteResolution(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.FromContextOrDefaults(ctx)
+	cfg.FeatureFlags.EnableAPIFields = config.AlphaAPIFields
+	ctx = config.ToContext(ctx, cfg)
+	pipeline := parse.MustParsePipeline(t, pipelineYAMLString)
+	pipelineRef := &v1beta1.PipelineRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}}
+	pipelineYAML := strings.Join([]string{
+		"kind: Pipeline",
+		"apiVersion: tekton.dev/v1beta1",
+		pipelineYAMLString,
+	}, "\n")
+	resolved := test.NewResolvedResource([]byte(pipelineYAML), nil, nil)
+	requester := test.NewRequester(resolved, nil)
+	fn, err := resources.GetPipelineFunc(ctx, nil, nil, requester, &v1beta1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: v1beta1.PipelineRunSpec{
+			PipelineRef:        pipelineRef,
+			ServiceAccountName: "default",
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to get pipeline fn: %s", err.Error())
+	}
+
+	resolvedPipeline, err := fn(ctx, pipelineRef.Name)
+	if err != nil {
+		t.Fatalf("failed to call pipelinefn: %s", err.Error())
+	}
+
+	if diff := cmp.Diff(pipeline, resolvedPipeline); diff != "" {
+		t.Error(diff)
+	}
+}
+
+func TestGetPipelineFunc_RemoteResolutionInvalidData(t *testing.T) {
+	ctx := context.Background()
+	cfg := config.FromContextOrDefaults(ctx)
+	cfg.FeatureFlags.EnableAPIFields = config.AlphaAPIFields
+	ctx = config.ToContext(ctx, cfg)
+	pipelineRef := &v1beta1.PipelineRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}}
+	resolvesTo := []byte("INVALID YAML")
+	resource := test.NewResolvedResource(resolvesTo, nil, nil)
+	requester := test.NewRequester(resource, nil)
+	fn, err := resources.GetPipelineFunc(ctx, nil, nil, requester, &v1beta1.PipelineRun{
+		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
+		Spec: v1beta1.PipelineRunSpec{
+			PipelineRef:        pipelineRef,
+			ServiceAccountName: "default",
+		},
+	})
+	if err != nil {
+		t.Fatalf("failed to get pipeline fn: %s", err.Error())
+	}
+	if _, err := fn(ctx, pipelineRef.Name); err == nil {
+		t.Fatalf("expected error due to invalid pipeline data but saw none")
 	}
 }
 
@@ -322,7 +351,7 @@ func simplePipelineWithBaseSpec() *v1beta1.Pipeline {
 	return p
 }
 
-func simplePipelineWithSpecAndParam(pt v1alpha1.ParamType) *v1beta1.Pipeline {
+func simplePipelineWithSpecAndParam(pt v1beta1.ParamType) *v1beta1.Pipeline {
 	p := simplePipelineWithBaseSpec()
 	p.Spec.Params = []v1beta1.ParamSpec{{
 		Name: "foo",
@@ -343,8 +372,18 @@ func simplePipelineWithSpecParamAndKind(pt v1beta1.ParamType, tk v1beta1.TaskKin
 	return p
 }
 
-func simplePipelineWithSpecParamKindNoType(pt v1beta1.ParamType, tk v1beta1.TaskKind) *v1beta1.Pipeline {
-	p := simplePipelineWithSpecParamAndKind(pt, tk)
-	p.TypeMeta = metav1.TypeMeta{}
-	return p
-}
+// This is missing the kind and apiVersion because those are added by
+// the MustParse helpers from the test package.
+var pipelineYAMLString = `
+metadata:
+  name: foo
+spec:
+  tasks:
+  - name: task1
+    taskSpec:
+      steps:
+      - name: step1
+        image: ubuntu
+        script: |
+          echo "hello world!"
+`

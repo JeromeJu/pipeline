@@ -22,12 +22,11 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
-	"reflect"
-	"sort"
 	"strconv"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/jenkins-x/go-scm/scm"
 	"github.com/tektoncd/pipeline/test/diff"
 )
@@ -72,11 +71,7 @@ func TestToDisk(t *testing.T) {
 		}},
 	}
 
-	d, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(d)
+	d := t.TempDir()
 	if err := ToDisk(rsrc, d); err != nil {
 		t.Error(err)
 	}
@@ -84,9 +79,7 @@ func TestToDisk(t *testing.T) {
 	// Base PR
 	pr := &scm.PullRequest{}
 	readAndUnmarshal(t, filepath.Join(d, "pr.json"), pr)
-	if err != nil {
-		t.Fatal(err)
-	}
+
 	if d := cmp.Diff(pr, rsrc.PR); d != "" {
 		t.Errorf("PullRequest %s", diff.PrintWantGot(d))
 	}
@@ -202,11 +195,7 @@ func TestToDisk(t *testing.T) {
 }
 
 func TestFromDiskWithoutComments(t *testing.T) {
-	d, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(d)
+	d := t.TempDir()
 
 	// Write some refs
 	base := scm.PullRequestBranch{
@@ -248,11 +237,7 @@ func TestFromDiskWithoutComments(t *testing.T) {
 }
 
 func TestFromDisk(t *testing.T) {
-	d, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(d)
+	d := t.TempDir()
 
 	// Write some refs
 	base := scm.PullRequestBranch{
@@ -509,11 +494,7 @@ func TestCommentsFromDisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := ioutil.TempDir("", "")
-			if err != nil {
-				t.Fatal(err)
-			}
-			defer os.RemoveAll(d)
+			d := t.TempDir()
 			if err := os.MkdirAll(filepath.Join(d, "comments"), 0750); err != nil {
 				t.Fatal(err)
 			}
@@ -596,11 +577,7 @@ func TestLabelsToDisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := ioutil.TempDir("", "")
-			if err != nil {
-				t.Fatalf("Error creating temp dir: %s", err)
-			}
-			defer os.RemoveAll(d)
+			d := t.TempDir()
 			if err := labelsToDisk(d, tt.args.labels); err != nil {
 				t.Errorf("labelsToDisk() error = %v", err)
 			}
@@ -664,11 +641,7 @@ func TestStatusToDisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := ioutil.TempDir("", "")
-			if err != nil {
-				t.Fatalf("Error creating temp dir: %s", err)
-			}
-			defer os.RemoveAll(d)
+			d := t.TempDir()
 			if err := statusToDisk(d, tt.args.statuses); err != nil {
 				t.Errorf("statusToDisk() error = %v", err)
 			}
@@ -733,11 +706,7 @@ func TestLabelsFromDisk(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			d, err := ioutil.TempDir("", "")
-			if err != nil {
-				t.Fatalf("Error creating temp dir: %s", err)
-			}
-			defer os.RemoveAll(d)
+			d := t.TempDir()
 
 			for _, l := range tt.args.fileNames {
 				if err := ioutil.WriteFile(filepath.Join(d, l), []byte{}, 0700); err != nil {
@@ -755,26 +724,17 @@ func TestLabelsFromDisk(t *testing.T) {
 				derefed = append(derefed, *l)
 			}
 
-			sort.Slice(derefed, func(i, j int) bool {
-				return derefed[i].Name < derefed[j].Name
-			})
-			sort.Slice(tt.want, func(i, j int) bool {
-				return tt.want[i].Name < tt.want[j].Name
-			})
-
-			if !reflect.DeepEqual(derefed, tt.want) {
-				t.Errorf("labelsFromDisk() = %v, want %v", derefed, tt.want)
+			if d := cmp.Diff(tt.want, derefed, cmpopts.SortSlices(func(i, j scm.Label) bool {
+				return i.Name < j.Name
+			})); d != "" {
+				t.Errorf("expected labelsFromDisk() to match %#v. Diff %s", derefed, diff.PrintWantGot(d))
 			}
 		})
 	}
 }
 
 func TestFromDiskPRShaWithNullHeadAndBase(t *testing.T) {
-	d, err := ioutil.TempDir("", "")
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer os.RemoveAll(d)
+	d := t.TempDir()
 
 	expectedSha := "1a2s3d4f5g6g6h7j8k9l"
 	// Write some refs

@@ -31,6 +31,7 @@ import (
 	"go.opencensus.io/tag"
 	"go.uber.org/zap"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/labels"
 	"knative.dev/pkg/apis"
 	"knative.dev/pkg/logging"
@@ -63,8 +64,6 @@ var (
 const (
 	// ReasonCancelled indicates that a PipelineRun was cancelled.
 	ReasonCancelled = "Cancelled"
-	// ReasonCancelledDeprecated Deprecated: "PipelineRunCancelled" indicates that a PipelineRun was cancelled.
-	ReasonCancelledDeprecated = "PipelineRunCancelled"
 )
 
 // Recorder holds keys for Tekton metrics
@@ -209,13 +208,20 @@ func nilInsertTag(task, taskrun string) []tag.Mutator {
 // DurationAndCount logs the duration of PipelineRun execution and
 // count for number of PipelineRuns succeed or failed
 // returns an error if its failed to log the metrics
-func (r *Recorder) DurationAndCount(pr *v1beta1.PipelineRun) error {
-	r.mutex.Lock()
-	defer r.mutex.Unlock()
+func (r *Recorder) DurationAndCount(pr *v1beta1.PipelineRun, beforeCondition *apis.Condition) error {
 
 	if !r.initialized {
 		return fmt.Errorf("ignoring the metrics recording for %s , failed to initialize the metrics recorder", pr.Name)
 	}
+
+	afterCondition := pr.Status.GetCondition(apis.ConditionSucceeded)
+	// To avoid recount
+	if equality.Semantic.DeepEqual(beforeCondition, afterCondition) {
+		return nil
+	}
+
+	r.mutex.Lock()
+	defer r.mutex.Unlock()
 
 	duration := time.Duration(0)
 	if pr.Status.StartTime != nil {
@@ -228,7 +234,7 @@ func (r *Recorder) DurationAndCount(pr *v1beta1.PipelineRun) error {
 	status := "success"
 	if cond := pr.Status.GetCondition(apis.ConditionSucceeded); cond.Status == corev1.ConditionFalse {
 		status = "failed"
-		if cond.Reason == ReasonCancelled || cond.Reason == ReasonCancelledDeprecated {
+		if cond.Reason == ReasonCancelled {
 			status = "cancelled"
 		}
 	}
@@ -255,7 +261,7 @@ func (r *Recorder) DurationAndCount(pr *v1beta1.PipelineRun) error {
 // returns an error if its failed to log the metrics
 func (r *Recorder) RunningPipelineRuns(lister listers.PipelineRunLister) error {
 	r.mutex.Lock()
-	r.mutex.Unlock()
+	defer r.mutex.Unlock()
 
 	if !r.initialized {
 		return errors.New("ignoring the metrics recording, failed to initialize the metrics recorder")

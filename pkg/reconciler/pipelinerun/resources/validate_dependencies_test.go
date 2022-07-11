@@ -59,11 +59,32 @@ func TestValidatePipelineTaskResults_ValidStates(t *testing.T) {
 		}, {
 			PipelineTask: &v1beta1.PipelineTask{
 				Name: "pt2",
-				Conditions: []v1beta1.PipelineTaskCondition{{
-					Params: []v1beta1.Param{{
-						Name:  "p",
-						Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result)"),
+				Params: []v1beta1.Param{{
+					Name:  "p",
+					Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result)"),
+				}},
+			},
+		}},
+	}, {
+		desc: "correct use of task and result names in matrix",
+		state: PipelineRunState{{
+			PipelineTask: &v1beta1.PipelineTask{
+				Name: "pt1",
+			},
+			ResolvedTaskResources: &resources.ResolvedTaskResources{
+				TaskName: "t",
+				TaskSpec: &v1beta1.TaskSpec{
+					Results: []v1beta1.TaskResult{{
+						Name: "result",
 					}},
+				},
+			},
+		}, {
+			PipelineTask: &v1beta1.PipelineTask{
+				Name: "pt2",
+				Matrix: []v1beta1.Param{{
+					Name:  "p",
+					Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result)", "foo"),
 				}},
 			},
 		}},
@@ -78,11 +99,9 @@ func TestValidatePipelineTaskResults_ValidStates(t *testing.T) {
 		}, {
 			PipelineTask: &v1beta1.PipelineTask{
 				Name: "pt2",
-				Conditions: []v1beta1.PipelineTaskCondition{{
-					Params: []v1beta1.Param{{
-						Name:  "p",
-						Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.a-dynamic-custom-task-result)"),
-					}},
+				Params: []v1beta1.Param{{
+					Name:  "p",
+					Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.a-dynamic-custom-task-result)"),
 				}},
 			},
 		}},
@@ -114,15 +133,13 @@ func TestValidatePipelineTaskResults_IncorrectTaskName(t *testing.T) {
 			},
 		}},
 	}, {
-		desc: "invalid result reference in condition",
+		desc: "invalid result reference in matrix",
 		state: PipelineRunState{{
 			PipelineTask: &v1beta1.PipelineTask{
 				Name: "pt1",
-				Conditions: []v1beta1.PipelineTaskCondition{{
-					Params: []v1beta1.Param{{
-						Name:  "p1",
-						Value: *v1beta1.NewArrayOrString(missingPipelineTaskVariable),
-					}},
+				Params: []v1beta1.Param{{
+					Name:  "p1",
+					Value: *v1beta1.NewArrayOrString(missingPipelineTaskVariable, "foo"),
 				}},
 			},
 		}},
@@ -153,7 +170,7 @@ func TestValidatePipelineTaskResults_IncorrectTaskName(t *testing.T) {
 // TestValidatePipelineTaskResults_IncorrectResultName tests that a result variable with
 // a misnamed Result is correctly caught by the validatePipelineTaskResults func.
 func TestValidatePipelineTaskResults_IncorrectResultName(t *testing.T) {
-	pt1 := &ResolvedPipelineRunTask{
+	pt1 := &ResolvedPipelineTask{
 		PipelineTask: &v1beta1.PipelineTask{
 			Name: "pt1",
 		},
@@ -181,15 +198,13 @@ func TestValidatePipelineTaskResults_IncorrectResultName(t *testing.T) {
 			},
 		}},
 	}, {
-		desc: "invalid result reference in condition",
+		desc: "invalid result reference in matrix",
 		state: PipelineRunState{pt1, {
 			PipelineTask: &v1beta1.PipelineTask{
 				Name: "pt2",
-				Conditions: []v1beta1.PipelineTaskCondition{{
-					Params: []v1beta1.Param{{
-						Name:  "p1",
-						Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result1)"),
-					}},
+				Matrix: []v1beta1.Param{{
+					Name:  "p1",
+					Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result1)", "$(tasks.pt1.results.result2)"),
 				}},
 			},
 		}},
@@ -220,7 +235,7 @@ func TestValidatePipelineTaskResults_IncorrectResultName(t *testing.T) {
 // TestValidatePipelineTaskResults_MissingTaskSpec tests that a malformed PipelineTask
 // with a name but no spec results in a validation error being returned.
 func TestValidatePipelineTaskResults_MissingTaskSpec(t *testing.T) {
-	pt1 := &ResolvedPipelineRunTask{
+	pt1 := &ResolvedPipelineTask{
 		PipelineTask: &v1beta1.PipelineTask{
 			Name: "pt1",
 		},
@@ -235,6 +250,14 @@ func TestValidatePipelineTaskResults_MissingTaskSpec(t *testing.T) {
 			Params: []v1beta1.Param{{
 				Name:  "p1",
 				Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result1)"),
+			}},
+		},
+	}, {
+		PipelineTask: &v1beta1.PipelineTask{
+			Name: "pt3",
+			Matrix: []v1beta1.Param{{
+				Name:  "p1",
+				Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result1)", "$(tasks.pt1.results.result2)"),
 			}},
 		},
 	}}
@@ -256,7 +279,7 @@ func TestValidatePipelineResults_ValidStates(t *testing.T) {
 		spec: &v1beta1.PipelineSpec{
 			Results: []v1beta1.PipelineResult{{
 				Name:  "foo-result",
-				Value: "just a text pipeline result",
+				Value: *v1beta1.NewArrayOrString("just a text pipeline result"),
 			}},
 		},
 		state: nil,
@@ -265,7 +288,7 @@ func TestValidatePipelineResults_ValidStates(t *testing.T) {
 		spec: &v1beta1.PipelineSpec{
 			Results: []v1beta1.PipelineResult{{
 				Name:  "foo-result",
-				Value: "test $(tasks.pt1.results.result1) 123",
+				Value: *v1beta1.NewArrayOrString("test $(tasks.pt1.results.result1) 123"),
 			}},
 		},
 		state: PipelineRunState{{
@@ -296,7 +319,7 @@ func TestValidatePipelineResults_IncorrectTaskName(t *testing.T) {
 	spec := &v1beta1.PipelineSpec{
 		Results: []v1beta1.PipelineResult{{
 			Name:  "foo-result",
-			Value: "$(tasks.pt1.results.result1)",
+			Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result1)"),
 		}},
 	}
 	state := PipelineRunState{}
@@ -312,7 +335,7 @@ func TestValidatePipelineResults_IncorrectResultName(t *testing.T) {
 	spec := &v1beta1.PipelineSpec{
 		Results: []v1beta1.PipelineResult{{
 			Name:  "foo-result",
-			Value: "$(tasks.pt1.results.result1)",
+			Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.result1)"),
 		}},
 	}
 	state := PipelineRunState{{

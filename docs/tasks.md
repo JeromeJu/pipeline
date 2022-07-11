@@ -165,7 +165,10 @@ The following requirements apply to each container image referenced in a `steps`
 - Each container image runs to completion or until the first failure occurs.
 - The CPU, memory, and ephemeral storage resource requests set on `Step`s
   will be adjusted to comply with any [`LimitRange`](https://kubernetes.io/docs/concepts/policy/limit-range/)s
-  present in the `Namespace`. For more detail, see [LimitRange support in Pipeline](./limitrange.md).
+  present in the `Namespace`. In addition, Kubernetes determines a pod's effective resource
+  requests and limits by summing the requests and limits for all its containers, even
+  though Tekton runs `Steps` sequentially.
+  For more detail, see [Compute Resources in Tekton](./compute-resources.md).
 
 Below is an example of setting the resource requests and limits for a step:
 
@@ -327,7 +330,7 @@ steps:
       echo "I am supposed to sleep for 60 seconds!"
       sleep 60
     timeout: 5s
-``` 
+```
 
 #### Specifying `onError` for a `step`
 
@@ -447,6 +450,10 @@ Parameter names:
 
 For example, `foo.Is-Bar_` is a valid parameter name, but `barIsBa$` or `0banana` are not.
 
+> NOTE:
+> 1. Parameter names are **case insensitive**. For example, `APPLE` and `apple` will be treated as equal. If they appear in the same TaskSpec's params, it will be rejected as invalid.
+> 2. If a parameter name contains dots (.), it must be referenced by using the [bracket notation](#substituting-parameters-and-resources) with either single or double quotes i.e. `$(params['foo.bar'])`, `$(params["foo.bar"])`. See the following example for more information.
+
 Each declared parameter has a `type` field, which can be set to either `array` or `string`. `array` is useful in cases where the number
 of compilation flags being supplied to a task varies throughout the `Task's` execution. If not specified, the `type` field defaults to
 `string`. When the actual parameter value is supplied, its parsed type is validated against the `type` field.
@@ -468,6 +475,12 @@ spec:
       type: array
     - name: someURL
       type: string
+    - name: foo.bar
+      description: "the name contains dot character"
+      default: "test"
+  results:
+    - name: echo-output
+      description: "successful echo"
   steps:
     - name: build
       image: my-builder
@@ -476,9 +489,14 @@ spec:
         "$(params.flags[*])",
         # It would be equivalent to use $(params["someURL"]) here,
         # which is necessary when the parameter name contains '.'
-        # characters (e.g. `$(params["some.other.URL"])`)
+        # characters (e.g. `$(params["some.other.URL"])`). See the example in step "echo-param"
         'url=$(params.someURL)',
       ]
+    - name: echo-param
+      image: bash
+      script: |
+        set -e
+        echo $(params["foo.bar"]) | tee $(results.echo-output.path)
 ```
 
 The following `TaskRun` supplies a dynamic number of strings within the `flags` parameter:
@@ -627,8 +645,19 @@ a `results` field but it's the responsibility of the `Task` to generate its cont
 It's important to note that Tekton does not perform any processing on the contents of results; they are emitted
 verbatim from your Task including any leading or trailing whitespace characters. Make sure to write only the
 precise string you want returned from your `Task` into the `/tekton/results/` files that your `Task` creates.
-You can use [`$(results.name.path)`](https://github.com/tektoncd/pipeline/blob/main/docs/variables.md#variables-available-in-a-task)
+You can use [`$(results.name.path)`](https://github.com/tektoncd/pipeline/blob/main/docs/variables.md#variables-available-in-a-task)**
 to avoid having to hardcode this path.
+
+Note: Tekton uses [termination
+messages](https://kubernetes.io/docs/tasks/debug/debug-application/determine-reason-pod-failure/#writing-and-reading-a-termination-message). As
+written in
+[tektoncd/pipeline#4808](https://github.com/tektoncd/pipeline/issues/4808),
+this has some *shortcomings*. The main point here is that the more
+containers we have in our pod, *the smaller the allowed size of each container's
+message*, which translates in Tekton to the **more steps you
+have in a Task, the smaller the result for each step can be**. Be aware that the number of
+steps in a Task affects the maximum size of a Result. *For example, if
+you have 10 steps, the size of each step's Result will have a maximum of less than 1KB*.
 
 In the example below, the `Task` specifies two files in the `results` field:
 `current-date-unix-timestamp` and `current-date-human-readable`.
@@ -666,6 +695,30 @@ or [at the `Pipeline` level](./pipelines.md#configuring-execution-results-at-the
 **Note:** The maximum size of a `Task's` results is limited by the container termination message feature of Kubernetes,
 as results are passed back to the controller via this mechanism. At present, the limit is
 ["4096 bytes"](https://github.com/kubernetes/kubernetes/blob/96e13de777a9eb57f87889072b68ac40467209ac/pkg/kubelet/container/runtime.go#L632).
+
+**Note:**  The result type currently support `string` and `array` (`array` is alpha gated feature), you can write `array` results via JSON escaped format. In the example below, the task specifies one files in the `results` field and write `array` to the file. And `array` is currently supported in Task level not in Pipeline level.
+
+```
+kind: Task
+apiVersion: tekton.dev/v1beta1
+metadata:
+  name: write-array
+  annotations:
+    description: |
+      A simple task that writes array
+spec:
+  results:
+    - name: array-results
+      type: array
+      description: The array results
+  steps:
+    - name: write-array
+      image: bash:latest
+      script: |
+        #!/usr/bin/env bash
+        echo -n "[\"hello\",\"world\"]" | tee $(results.array-results.path)
+```
+
 Results are written to the termination message encoded as JSON objects and Tekton uses those objects
 to pass additional information to the controller. As such, `Task` results are best suited for holding
 small amounts of data, such as commit SHAs, branch names, ephemeral namespaces, and so on.
@@ -815,8 +868,10 @@ variable values as follows:
 - To reference a parameter in a `Task`, use the following syntax, where `<name>` is the name of the parameter:
   ```shell
   # dot notation
-  $(params.<name>)
+  # Here, the name cannot contain dots (eg. foo.bar is not allowed). If the name contains `dots`, it can only be accessed via the bracket notation.
+  $(params.<name> )
   # or bracket notation (wrapping <name> with either single or double quotes):
+  # Here, the name can contain dots (eg. foo.bar is allowed).
   $(params['<name>'])
   $(params["<name>"])
   ```
@@ -925,9 +980,9 @@ Study the following code examples to better understand how to configure your `Ta
 - [Using a `Secret` as an environment source](#using-a-secret-as-an-environment-source)
 - [Using a `Sidecar` in a `Task`](#using-a-sidecar-in-a-task)
 
-_Tip: See the collection of simple
-[examples](https://github.com/tektoncd/pipeline/tree/main/examples) for
-additional code samples._
+_Tip: See the collection of Tasks in the 
+[Tekton community catalog](https://github.com/tektoncd/catalog) for
+more examples.
 
 ### Building and pushing a Docker image
 
@@ -939,32 +994,26 @@ unsafe** and is shown here only as a demonstration. Use [kaniko](https://github.
 ```yaml
 spec:
   params:
-    # These may be overridden, but provide sensible defaults.
-    - name: directory
-      type: string
-      description: The directory containing the build context.
-      default: /workspace
+    # This may be overridden, but is a sensible default.
     - name: dockerfileName
       type: string
       description: The name of the Dockerfile
       default: Dockerfile
-  resources:
-    inputs:
-      - name: workspace
-        type: git
-    outputs:
-      - name: builtImage
-        type: image
+    - name: image
+      type: string
+      description: The image to build and push
+  workspaces:
+  - name: source
   steps:
     - name: dockerfile-build
       image: gcr.io/cloud-builders/docker
-      workingDir: "$(params.directory)"
+      workingDir: "$(workspaces.source.path)"
       args:
         [
           "build",
           "--no-cache",
           "--tag",
-          "$(resources.outputs.image.url)",
+          "$(params.image)",
           "--file",
           "$(params.dockerfileName)",
           ".",
@@ -975,7 +1024,7 @@ spec:
 
     - name: dockerfile-push
       image: gcr.io/cloud-builders/docker
-      args: ["push", "$(resources.outputs.image.url)"]
+      args: ["push", "$(params.image)"]
       volumeMounts:
         - name: docker-socket
           mountPath: /var/run/docker.sock
@@ -1062,15 +1111,12 @@ spec:
       type: string
       description: name of the secret holding the github-token
       default: github-token
-  resources:
-    inputs:
-      - name: source
-        type: git
-        targetPath: src/$(params.package)
+  workspaces:
+  - name: source
   steps:
     - name: release
       image: goreleaser/goreleaser
-      workingDir: /workspace/src/$(params.package)
+      workingDir: $(workspaces.source.path)/$(params.package)
       command:
         - goreleaser
       args:
@@ -1163,10 +1209,10 @@ log into the `Pod` and add a `Step` that pauses the `Task` at the desired stage.
 
 ### Running Step Containers as a Non Root User
 
-All steps that do not require to be run as a root user should make use of TaskRun features to 
-designate the container for a step runs as a user without root permissions. As a best practice, 
-running containers as non root should be built into the container image to avoid any possibility 
-of the container being run as root. However, as a further measure of enforcing this practice, 
+All steps that do not require to be run as a root user should make use of TaskRun features to
+designate the container for a step runs as a user without root permissions. As a best practice,
+running containers as non root should be built into the container image to avoid any possibility
+of the container being run as root. However, as a further measure of enforcing this practice,
 steps can make use of a `securityContext` to specify how the container should run.
 
 An example of running Task steps as a non root user is shown below:
@@ -1210,17 +1256,17 @@ spec:
       runAsUser: 1001
 ```
 
-In the example above, the step `show-user-2000` specifies via a `securityContext` that the container 
-for the step should run as user 2000. A `securityContext` must still be specified via a TaskRun `podTemplate` 
-for this TaskRun to run in a Kubernetes environment that enforces running containers as non root as a requirement. 
+In the example above, the step `show-user-2000` specifies via a `securityContext` that the container
+for the step should run as user 2000. A `securityContext` must still be specified via a TaskRun `podTemplate`
+for this TaskRun to run in a Kubernetes environment that enforces running containers as non root as a requirement.
 
-The `runAsNonRoot` property specified via the `podTemplate` above validates that steps part of this TaskRun are 
-running as non root users and will fail to start any step container that attempts to run as root. Only specifying 
-`runAsNonRoot: true` will not actually run containers as non root as the property simply validates that steps are not 
+The `runAsNonRoot` property specified via the `podTemplate` above validates that steps part of this TaskRun are
+running as non root users and will fail to start any step container that attempts to run as root. Only specifying
+`runAsNonRoot: true` will not actually run containers as non root as the property simply validates that steps are not
 running as root. It is the `runAsUser` property that is actually used to set the non root user ID for the container.
 
-If a step defines its own `securityContext`, it will be applied for the step container over the `securityContext` 
-specified at the pod level via the TaskRun `podTemplate`. 
+If a step defines its own `securityContext`, it will be applied for the step container over the `securityContext`
+specified at the pod level via the TaskRun `podTemplate`.
 
 More information about Pod and Container Security Contexts can be found via the [Kubernetes website](https://kubernetes.io/docs/tasks/configure-pod-container/security-context/#set-the-security-context-for-a-pod).
 

@@ -20,20 +20,15 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
 	"strings"
 	"testing"
 
-	"github.com/tektoncd/pipeline/test/parse"
-
 	"github.com/google/go-cmp/cmp"
-	"github.com/tektoncd/pipeline/test/diff"
-
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-
-	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
-
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
+	"github.com/tektoncd/pipeline/test/diff"
+	"github.com/tektoncd/pipeline/test/parse"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -55,11 +50,6 @@ func TestPipelineLevelFinally_OneDAGTaskFailed_InvalidTaskResult_Failure(t *test
 	c, namespace := setup(ctx, t)
 	knativetest.CleanupOnInterrupt(func() { tearDown(ctx, t, c, namespace) }, t.Logf)
 	defer tearDown(ctx, t, c, namespace)
-
-	cond := getCondition(t, namespace)
-	if _, err := c.ConditionClient.Create(ctx, cond, metav1.CreateOptions{}); err != nil {
-		t.Fatalf("Failed to create Condition `%s`: %s", cond1Name, err)
-	}
 
 	task := getFailTask(t, namespace)
 	task.Spec.Results = append(task.Spec.Results, v1beta1.TaskResult{
@@ -202,8 +192,11 @@ spec:
   - name: dagtask3
     taskRef:
       name: %s
-    conditions:
-    - conditionRef: %s
+    when:
+    - input: banana
+      operator: in
+      values:
+      - apple
   - name: dagtask4
     taskRef:
       name: %s
@@ -222,7 +215,7 @@ spec:
 		taskConsumingResultInWhenExpression.Name, taskConsumingResultInWhenExpression.Name, taskConsumingResultInWhenExpression.Name,
 		taskConsumingResultInWhenExpression.Name,
 		// Tasks
-		task.Name, delayedTask.Name, successTask.Name, cond.Name, successTask.Name, taskProducingResult.Name))
+		task.Name, delayedTask.Name, successTask.Name, successTask.Name, taskProducingResult.Name))
 	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline: %s", err)
 	}
@@ -247,9 +240,9 @@ spec:
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", pipelineRun.Name, err)
 	}
 
-	// expecting taskRuns for dagtask1, dagtask2, dagtask3 (with condition failure), dagtask5, finaltask1, finaltask2,
+	// expecting taskRuns for dagtask1, dagtask2, dagtask5, finaltask1, finaltask2,
 	// finaltaskconsumingdagtask5, guardedfinaltaskusingdagtask5result1, guardedfinaltaskusingdagtask5status1
-	expectedTaskRunsCount := 9
+	expectedTaskRunsCount := 8
 	if len(taskrunList.Items) != expectedTaskRunsCount {
 		var s []string
 		for _, n := range taskrunList.Items {
@@ -273,10 +266,6 @@ spec:
 				t.Errorf("Error waiting for TaskRun to succeed: %v", err)
 			}
 			dagTask2EndTime = taskrunItem.Status.CompletionTime
-		case n == "dagtask3":
-			if !isSkipped(t, n, taskrunItem.Status.Conditions) {
-				t.Fatalf("dag task %s should have skipped due to condition failure", n)
-			}
 		case n == "dagtask4":
 			t.Fatalf("task %s should have skipped due to when expression", n)
 		case n == "dagtask5":
@@ -347,29 +336,41 @@ spec:
 	// finaltaskconsumingdagtask1 has a reference to a task result from failed task
 	// finaltaskconsumingdagtask4 has a reference to a task result from skipped task with when expression
 	expectedSkippedTasks := []v1beta1.SkippedTask{{
-		Name: "dagtask3",
+		Name:   "dagtask3",
+		Reason: v1beta1.StoppingSkip,
+		WhenExpressions: v1beta1.WhenExpressions{{
+			Input:    "banana",
+			Operator: "in",
+			Values:   []string{"apple"},
+		}},
 	}, {
-		Name: "dagtask4",
+		Name:   "dagtask4",
+		Reason: v1beta1.StoppingSkip,
 		WhenExpressions: v1beta1.WhenExpressions{{
 			Input:    "foo",
 			Operator: "notin",
 			Values:   []string{"foo"},
 		}},
 	}, {
-		Name: "finaltaskconsumingdagtask1",
+		Name:   "finaltaskconsumingdagtask1",
+		Reason: v1beta1.MissingResultsSkip,
 	}, {
-		Name: "finaltaskconsumingdagtask4",
+		Name:   "finaltaskconsumingdagtask4",
+		Reason: v1beta1.MissingResultsSkip,
 	}, {
-		Name: "guardedfinaltaskconsumingdagtask4",
+		Name:   "guardedfinaltaskconsumingdagtask4",
+		Reason: v1beta1.MissingResultsSkip,
 	}, {
-		Name: "guardedfinaltaskusingdagtask5result2",
+		Name:   "guardedfinaltaskusingdagtask5result2",
+		Reason: v1beta1.WhenExpressionsSkip,
 		WhenExpressions: v1beta1.WhenExpressions{{
 			Input:    "Hello",
 			Operator: "notin",
 			Values:   []string{"Hello"},
 		}},
 	}, {
-		Name: "guardedfinaltaskusingdagtask5status2",
+		Name:   "guardedfinaltaskusingdagtask5status2",
+		Reason: v1beta1.WhenExpressionsSkip,
 		WhenExpressions: v1beta1.WhenExpressions{{
 			Input:    "Succeeded",
 			Operator: "in",
@@ -383,9 +384,9 @@ spec:
 
 	actualSkippedTasks := pr.Status.SkippedTasks
 	// Sort tasks based on their names to get similar order as in expected list
-	sort.Slice(actualSkippedTasks, func(i int, j int) bool { return actualSkippedTasks[i].Name < actualSkippedTasks[j].Name })
-
-	if d := cmp.Diff(actualSkippedTasks, expectedSkippedTasks); d != "" {
+	if d := cmp.Diff(actualSkippedTasks, expectedSkippedTasks, cmpopts.SortSlices(func(i, j v1beta1.SkippedTask) bool {
+		return i.Name < j.Name
+	})); d != "" {
 		t.Fatalf("Expected four skipped tasks, dag task with condition failure dagtask3, dag task with when expression,"+
 			"two final tasks with missing result reference finaltaskconsumingdagtask1 and finaltaskconsumingdagtask4 in SkippedTasks."+
 			" Diff: %s", diff.PrintWantGot(d))
@@ -691,6 +692,7 @@ spec:
 }
 
 func isSuccessful(t *testing.T, taskRunName string, conds duckv1beta1.Conditions) bool {
+	t.Helper()
 	for _, c := range conds {
 		if c.Type == apis.ConditionSucceeded {
 			if c.Status != corev1.ConditionTrue {
@@ -704,21 +706,9 @@ func isSuccessful(t *testing.T, taskRunName string, conds duckv1beta1.Conditions
 }
 
 func isCancelled(t *testing.T, taskRunName string, conds duckv1beta1.Conditions) bool {
+	t.Helper()
 	for _, c := range conds {
 		if c.Type == apis.ConditionSucceeded {
-			return true
-		}
-	}
-	t.Errorf("TaskRun status %q had no Succeeded condition", taskRunName)
-	return false
-}
-
-func isSkipped(t *testing.T, taskRunName string, conds duckv1beta1.Conditions) bool {
-	for _, c := range conds {
-		if c.Type == apis.ConditionSucceeded {
-			if c.Status != corev1.ConditionFalse && c.Reason != resources.ReasonConditionCheckFailed {
-				t.Errorf("TaskRun status %q is not skipped due to condition failure, got %q", taskRunName, c.Status)
-			}
 			return true
 		}
 	}
@@ -819,18 +809,6 @@ spec:
   params:
   - name: %s
 `, helpers.ObjectNameForTest(t), namespace, paramName))
-}
-
-func getCondition(t *testing.T, namespace string) *v1alpha1.Condition {
-	return parse.MustParseCondition(t, fmt.Sprintf(`
-metadata:
-  name: %s
-  namespace: %s
-spec: 
-  check:
-    image: ubuntu
-    script: 'exit 1'
-`, helpers.ObjectNameForTest(t), namespace))
 }
 
 func getPipelineRun(t *testing.T, namespace, p string) *v1beta1.PipelineRun {

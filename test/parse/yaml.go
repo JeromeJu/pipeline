@@ -34,16 +34,6 @@ kind: TaskRun
 	return &tr
 }
 
-// MustParseAlphaTaskRun takes YAML and parses it into a *v1alpha1.TaskRun
-func MustParseAlphaTaskRun(t *testing.T, yaml string) *v1alpha1.TaskRun {
-	var tr v1alpha1.TaskRun
-	yaml = `apiVersion: tekton.dev/v1alpha1
-kind: TaskRun
-` + yaml
-	mustParseYAML(t, yaml, &tr)
-	return &tr
-}
-
 // MustParseRun takes YAML and parses it into a *v1alpha1.Run
 func MustParseRun(t *testing.T, yaml string) *v1alpha1.Run {
 	var r v1alpha1.Run
@@ -64,30 +54,20 @@ kind: Task
 	return &task
 }
 
-// MustParseAlphaTask takes YAML and parses it into a *v1alpha1.Task
-func MustParseAlphaTask(t *testing.T, yaml string) *v1alpha1.Task {
-	var task v1alpha1.Task
-	yaml = `apiVersion: tekton.dev/v1alpha1
-kind: Task
+// MustParseClusterTask takes YAML and parses it into a *v1beta1.ClusterTask
+func MustParseClusterTask(t *testing.T, yaml string) *v1beta1.ClusterTask {
+	var clusterTask v1beta1.ClusterTask
+	yaml = `apiVersion: tekton.dev/v1beta1
+kind: ClusterTask
 ` + yaml
-	mustParseYAML(t, yaml, &task)
-	return &task
+	mustParseYAML(t, yaml, &clusterTask)
+	return &clusterTask
 }
 
 // MustParsePipelineRun takes YAML and parses it into a *v1beta1.PipelineRun
 func MustParsePipelineRun(t *testing.T, yaml string) *v1beta1.PipelineRun {
 	var pr v1beta1.PipelineRun
 	yaml = `apiVersion: tekton.dev/v1beta1
-kind: PipelineRun
-` + yaml
-	mustParseYAML(t, yaml, &pr)
-	return &pr
-}
-
-// MustParseAlphaPipelineRun takes YAML and parses it into a *v1alpha1.PipelineRun
-func MustParseAlphaPipelineRun(t *testing.T, yaml string) *v1alpha1.PipelineRun {
-	var pr v1alpha1.PipelineRun
-	yaml = `apiVersion: tekton.dev/v1alpha1
 kind: PipelineRun
 ` + yaml
 	mustParseYAML(t, yaml, &pr)
@@ -104,16 +84,6 @@ kind: Pipeline
 	return &pipeline
 }
 
-// MustParseAlphaPipeline takes YAML and parses it into a *v1alpha1.Pipeline
-func MustParseAlphaPipeline(t *testing.T, yaml string) *v1alpha1.Pipeline {
-	var pipeline v1alpha1.Pipeline
-	yaml = `apiVersion: tekton.dev/v1alpha1
-kind: Pipeline
-` + yaml
-	mustParseYAML(t, yaml, &pipeline)
-	return &pipeline
-}
-
 // MustParsePipelineResource takes YAML and parses it into a *resourcev1alpha1.PipelineResource
 func MustParsePipelineResource(t *testing.T, yaml string) *resourcev1alpha1.PipelineResource {
 	var resource resourcev1alpha1.PipelineResource
@@ -122,16 +92,6 @@ kind: PipelineResource
 ` + yaml
 	mustParseYAML(t, yaml, &resource)
 	return &resource
-}
-
-// MustParseCondition takes YAML and parses it into a *v1alpha1.Condition
-func MustParseCondition(t *testing.T, yaml string) *v1alpha1.Condition {
-	var cond v1alpha1.Condition
-	yaml = `apiVersion: tekton.dev/v1alpha1
-kind: Condition
-` + yaml
-	mustParseYAML(t, yaml, &cond)
-	return &cond
 }
 
 func mustParseYAML(t *testing.T, yaml string, i runtime.Object) {

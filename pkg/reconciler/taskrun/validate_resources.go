@@ -69,65 +69,140 @@ func validateResources(requiredResources []v1beta1.TaskResource, providedResourc
 	return nil
 }
 
-func validateParams(ctx context.Context, paramSpecs []v1beta1.ParamSpec, params []v1beta1.Param) error {
-	var neededParams []string
-	paramTypes := make(map[string]v1beta1.ParamType)
-	neededParams = make([]string, 0, len(paramSpecs))
+func validateParams(ctx context.Context, paramSpecs []v1beta1.ParamSpec, params []v1beta1.Param, matrix []v1beta1.Param) error {
+	neededParamsNames, neededParamsTypes := neededParamsNamesAndTypes(paramSpecs)
+	providedParamsNames := providedParamsNames(append(params, matrix...))
+	if missingParamsNames := missingParamsNames(neededParamsNames, providedParamsNames, paramSpecs); len(missingParamsNames) != 0 {
+		return fmt.Errorf("missing values for these params which have no default values: %s", missingParamsNames)
+	}
+	if extraParamsNames := extraParamsNames(ctx, neededParamsNames, providedParamsNames); len(extraParamsNames) != 0 {
+		return fmt.Errorf("didn't need these params but they were provided anyway: %s", extraParamsNames)
+	}
+	if wrongTypeParamNames := wrongTypeParamsNames(params, matrix, neededParamsTypes); len(wrongTypeParamNames) != 0 {
+		return fmt.Errorf("param types don't match the user-specified type: %s", wrongTypeParamNames)
+	}
+	if missingKeysObjectParamNames := MissingKeysObjectParamNames(paramSpecs, params); len(missingKeysObjectParamNames) != 0 {
+		return fmt.Errorf("missing keys for these params which are required in ParamSpec's properties %v", missingKeysObjectParamNames)
+	}
+
+	return nil
+}
+
+func neededParamsNamesAndTypes(paramSpecs []v1beta1.ParamSpec) ([]string, map[string]v1beta1.ParamType) {
+	var neededParamsNames []string
+	neededParamsTypes := make(map[string]v1beta1.ParamType)
+	neededParamsNames = make([]string, 0, len(paramSpecs))
 	for _, inputResourceParam := range paramSpecs {
-		neededParams = append(neededParams, inputResourceParam.Name)
-		paramTypes[inputResourceParam.Name] = inputResourceParam.Type
+		neededParamsNames = append(neededParamsNames, inputResourceParam.Name)
+		neededParamsTypes[inputResourceParam.Name] = inputResourceParam.Type
 	}
-	providedParams := make([]string, 0, len(params))
+	return neededParamsNames, neededParamsTypes
+}
+
+func providedParamsNames(params []v1beta1.Param) []string {
+	providedParamsNames := make([]string, 0, len(params))
 	for _, param := range params {
-		providedParams = append(providedParams, param.Name)
+		providedParamsNames = append(providedParamsNames, param.Name)
 	}
-	missingParams := list.DiffLeft(neededParams, providedParams)
-	var missingParamsNoDefaults []string
-	for _, param := range missingParams {
+	return providedParamsNames
+}
+
+func missingParamsNames(neededParams []string, providedParams []string, paramSpecs []v1beta1.ParamSpec) []string {
+	missingParamsNames := list.DiffLeft(neededParams, providedParams)
+	var missingParamsNamesWithNoDefaults []string
+	for _, param := range missingParamsNames {
 		for _, inputResourceParam := range paramSpecs {
 			if inputResourceParam.Name == param && inputResourceParam.Default == nil {
-				missingParamsNoDefaults = append(missingParamsNoDefaults, param)
+				missingParamsNamesWithNoDefaults = append(missingParamsNamesWithNoDefaults, param)
 			}
 		}
 	}
-	if len(missingParamsNoDefaults) > 0 {
-		return fmt.Errorf("missing values for these params which have no default values: %s", missingParamsNoDefaults)
-	}
+	return missingParamsNamesWithNoDefaults
+}
+
+func extraParamsNames(ctx context.Context, neededParams []string, providedParams []string) []string {
 	// If alpha features are enabled, disable checking for extra params.
 	// Extra params are needed to support
 	// https://github.com/tektoncd/community/blob/main/teps/0023-implicit-mapping.md
 	// So that parent params can be passed down to subresources (even if they
 	// are not explicitly used).
 	if config.FromContextOrDefaults(ctx).FeatureFlags.EnableAPIFields != "alpha" {
-		extraParams := list.DiffLeft(providedParams, neededParams)
-		if len(extraParams) != 0 {
-			return fmt.Errorf("didn't need these params but they were provided anyway: %s", extraParams)
-		}
+		return list.DiffLeft(providedParams, neededParams)
 	}
+	return nil
+}
 
-	// Now that we have checked against missing/extra params, make sure each param's actual type matches
-	// the user-specified type.
+func wrongTypeParamsNames(params []v1beta1.Param, matrix []v1beta1.Param, neededParamsTypes map[string]v1beta1.ParamType) []string {
 	var wrongTypeParamNames []string
 	for _, param := range params {
-		if _, ok := paramTypes[param.Name]; !ok {
+		if _, ok := neededParamsTypes[param.Name]; !ok {
 			// Ignore any missing params - this happens when extra params were
 			// passed to the task that aren't being used.
 			continue
 		}
-		if param.Value.Type != paramTypes[param.Name] {
+		if param.Value.Type != neededParamsTypes[param.Name] {
 			wrongTypeParamNames = append(wrongTypeParamNames, param.Name)
 		}
 	}
-	if len(wrongTypeParamNames) != 0 {
-		return fmt.Errorf("param types don't match the user-specified type: %s", wrongTypeParamNames)
+	for _, param := range matrix {
+		if _, ok := neededParamsTypes[param.Name]; !ok {
+			// Ignore any missing params - this happens when extra params were
+			// passed to the task that aren't being used.
+			continue
+		}
+		if neededParamsTypes[param.Name] != v1beta1.ParamTypeString {
+			wrongTypeParamNames = append(wrongTypeParamNames, param.Name)
+		}
+	}
+	return wrongTypeParamNames
+}
+
+// MissingKeysObjectParamNames checks if all required keys of object type params are provided in taskrun params.
+func MissingKeysObjectParamNames(paramSpecs []v1beta1.ParamSpec, params []v1beta1.Param) map[string][]string {
+	neededKeys := make(map[string][]string)
+	providedKeys := make(map[string][]string)
+
+	// collect needed keys for object parameters
+	for _, spec := range paramSpecs {
+		if spec.Type == v1beta1.ParamTypeObject {
+			for key := range spec.Properties {
+				neededKeys[spec.Name] = append(neededKeys[spec.Name], key)
+			}
+		}
 	}
 
-	return nil
+	// collect provided keys for object parameters
+	for _, p := range params {
+		if p.Value.Type == v1beta1.ParamTypeObject {
+			for key := range p.Value.ObjectVal {
+				providedKeys[p.Name] = append(providedKeys[p.Name], key)
+			}
+		}
+	}
+
+	return findMissingKeys(neededKeys, providedKeys)
+}
+
+// findMissingKeys checks if objects have missing keys in its provider (either taskrun value or result value)
+func findMissingKeys(neededKeys, providedKeys map[string][]string) map[string][]string {
+	missings := map[string][]string{}
+	for p, keys := range providedKeys {
+		if _, ok := neededKeys[p]; !ok {
+			// Ignore any missing objects - this happens when object param is provided with default
+			continue
+		}
+		missedKeys := list.DiffLeft(neededKeys[p], keys)
+		if len(missedKeys) != 0 {
+			missings[p] = missedKeys
+		}
+	}
+
+	return missings
 }
 
 // ValidateResolvedTaskResources validates task inputs, params and output matches taskrun
-func ValidateResolvedTaskResources(ctx context.Context, params []v1beta1.Param, rtr *resources.ResolvedTaskResources) error {
-	if err := validateParams(ctx, rtr.TaskSpec.Params, params); err != nil {
+func ValidateResolvedTaskResources(ctx context.Context, params []v1beta1.Param, matrix []v1beta1.Param, rtr *resources.ResolvedTaskResources) error {
+	if err := validateParams(ctx, rtr.TaskSpec.Params, params, matrix); err != nil {
 		return fmt.Errorf("invalid input params for task %s: %w", rtr.TaskName, err)
 	}
 	inputs := []v1beta1.TaskResource{}
@@ -146,7 +221,7 @@ func ValidateResolvedTaskResources(ctx context.Context, params []v1beta1.Param, 
 	return nil
 }
 
-func validateTaskSpecRequestResources(ctx context.Context, taskSpec *v1beta1.TaskSpec) error {
+func validateTaskSpecRequestResources(taskSpec *v1beta1.TaskSpec) error {
 	if taskSpec != nil {
 		for _, step := range taskSpec.Steps {
 			for k, request := range step.Resources.Requests {
@@ -173,13 +248,13 @@ func validateTaskSpecRequestResources(ctx context.Context, taskSpec *v1beta1.Tas
 }
 
 // validateOverrides validates that all stepOverrides map to valid steps, and likewise for sidecarOverrides
-func validateOverrides(ctx context.Context, ts *v1beta1.TaskSpec, trs *v1beta1.TaskRunSpec) error {
-	stepErr := validateStepOverrides(ctx, ts, trs)
-	sidecarErr := validateSidecarOverrides(ctx, ts, trs)
+func validateOverrides(ts *v1beta1.TaskSpec, trs *v1beta1.TaskRunSpec) error {
+	stepErr := validateStepOverrides(ts, trs)
+	sidecarErr := validateSidecarOverrides(ts, trs)
 	return multierror.Append(stepErr, sidecarErr).ErrorOrNil()
 }
 
-func validateStepOverrides(ctx context.Context, ts *v1beta1.TaskSpec, trs *v1beta1.TaskRunSpec) error {
+func validateStepOverrides(ts *v1beta1.TaskSpec, trs *v1beta1.TaskRunSpec) error {
 	var err error
 	stepNames := sets.NewString()
 	for _, step := range ts.Steps {
@@ -193,7 +268,7 @@ func validateStepOverrides(ctx context.Context, ts *v1beta1.TaskSpec, trs *v1bet
 	return err
 }
 
-func validateSidecarOverrides(ctx context.Context, ts *v1beta1.TaskSpec, trs *v1beta1.TaskRunSpec) error {
+func validateSidecarOverrides(ts *v1beta1.TaskSpec, trs *v1beta1.TaskRunSpec) error {
 	var err error
 	sidecarNames := sets.NewString()
 	for _, sidecar := range ts.Sidecars {
@@ -205,4 +280,67 @@ func validateSidecarOverrides(ctx context.Context, ts *v1beta1.TaskSpec, trs *v1
 		}
 	}
 	return err
+}
+
+// validateResults checks the emitted results type and object properties against the ones defined in spec.
+func validateTaskRunResults(tr *v1beta1.TaskRun, resolvedTaskSpec *v1beta1.TaskSpec) error {
+	specResults := []v1beta1.TaskResult{}
+	if tr.Spec.TaskSpec != nil {
+		specResults = append(specResults, tr.Spec.TaskSpec.Results...)
+	}
+
+	if resolvedTaskSpec != nil {
+		specResults = append(specResults, resolvedTaskSpec.Results...)
+	}
+
+	// When get the results, check if the type of result is the expected one
+	if missmatchedTypes := mismatchedTypesResults(tr, specResults); len(missmatchedTypes) != 0 {
+		return fmt.Errorf("missmatched Types for these results, %v", missmatchedTypes)
+	}
+
+	// When get the results, for object value need to check if they have missing keys.
+	if missingKeysObjectNames := missingKeysofObjectResults(tr, specResults); len(missingKeysObjectNames) != 0 {
+		return fmt.Errorf("missing keys for these results which are required in TaskResult's properties %v", missingKeysObjectNames)
+	}
+	return nil
+}
+
+// mismatchedTypesResults checks and returns all the mismatched types of emitted results against specified results.
+func mismatchedTypesResults(tr *v1beta1.TaskRun, specResults []v1beta1.TaskResult) map[string][]string {
+	neededTypes := make(map[string][]string)
+	providedTypes := make(map[string][]string)
+	// collect needed keys for object results
+	for _, r := range specResults {
+		neededTypes[r.Name] = append(neededTypes[r.Name], string(r.Type))
+	}
+
+	// collect provided keys for object results
+	for _, trr := range tr.Status.TaskRunResults {
+		providedTypes[trr.Name] = append(providedTypes[trr.Name], string(trr.Type))
+	}
+	return findMissingKeys(neededTypes, providedTypes)
+}
+
+// missingKeysofObjectResults checks and returns the missing keys of object results.
+func missingKeysofObjectResults(tr *v1beta1.TaskRun, specResults []v1beta1.TaskResult) map[string][]string {
+	neededKeys := make(map[string][]string)
+	providedKeys := make(map[string][]string)
+	// collect needed keys for object results
+	for _, r := range specResults {
+		if string(r.Type) == string(v1beta1.ParamTypeObject) {
+			for key := range r.Properties {
+				neededKeys[r.Name] = append(neededKeys[r.Name], key)
+			}
+		}
+	}
+
+	// collect provided keys for object results
+	for _, trr := range tr.Status.TaskRunResults {
+		if trr.Value.Type == v1beta1.ParamTypeObject {
+			for key := range trr.Value.ObjectVal {
+				providedKeys[trr.Name] = append(providedKeys[trr.Name], key)
+			}
+		}
+	}
+	return findMissingKeys(neededKeys, providedKeys)
 }

@@ -17,10 +17,10 @@ limitations under the License.
 package v1beta1_test
 
 import (
-	"sort"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/test/diff"
 	"k8s.io/apimachinery/pkg/selection"
@@ -42,6 +42,53 @@ func TestNewResultReference(t *testing.T) {
 			Result:       "sumResult",
 		}},
 	}, {
+		name: "refer whole array result",
+		param: v1beta1.Param{
+			Name:  "param",
+			Value: *v1beta1.NewArrayOrString("$(tasks.sumTask.results.sumResult[*])"),
+		},
+		want: []*v1beta1.ResultRef{{
+			PipelineTask: "sumTask",
+			Result:       "sumResult",
+		}},
+	}, {
+		name: "Test valid expression with single object result property",
+		param: v1beta1.Param{
+			Name:  "param",
+			Value: *v1beta1.NewArrayOrString("$(tasks.sumTask.results.sumResult.key1)"),
+		},
+		want: []*v1beta1.ResultRef{{
+			PipelineTask: "sumTask",
+			Result:       "sumResult",
+			Property:     "key1",
+		}},
+	}, {
+		name: "refer array indexing result",
+		param: v1beta1.Param{
+			Name:  "param",
+			Value: *v1beta1.NewArrayOrString("$(tasks.sumTask.results.sumResult[1])"),
+		},
+		want: []*v1beta1.ResultRef{{
+			PipelineTask: "sumTask",
+			Result:       "sumResult",
+			ResultsIndex: 1,
+		}},
+	}, {
+		name: "Test valid expression with multiple object result properties",
+		param: v1beta1.Param{
+			Name:  "param",
+			Value: *v1beta1.NewArrayOrString("$(tasks.sumTask.results.imageresult.digest), and another one $(tasks.sumTask.results.imageresult.tag)"),
+		},
+		want: []*v1beta1.ResultRef{{
+			PipelineTask: "sumTask",
+			Result:       "imageresult",
+			Property:     "digest",
+		}, {
+			PipelineTask: "sumTask",
+			Result:       "imageresult",
+			Property:     "tag",
+		}},
+	}, {
 		name: "substitution within string",
 		param: v1beta1.Param{
 			Name:  "param",
@@ -55,7 +102,7 @@ func TestNewResultReference(t *testing.T) {
 		name: "multiple substitution",
 		param: v1beta1.Param{
 			Name:  "param",
-			Value: *v1beta1.NewArrayOrString("$(tasks.sumTask1.results.sumResult) and another $(tasks.sumTask2.results.sumResult)"),
+			Value: *v1beta1.NewArrayOrString("$(tasks.sumTask1.results.sumResult) and another $(tasks.sumTask2.results.sumResult), last one $(tasks.sumTask3.results.sumResult.key1)"),
 		},
 		want: []*v1beta1.ResultRef{{
 			PipelineTask: "sumTask1",
@@ -63,12 +110,16 @@ func TestNewResultReference(t *testing.T) {
 		}, {
 			PipelineTask: "sumTask2",
 			Result:       "sumResult",
+		}, {
+			PipelineTask: "sumTask3",
+			Result:       "sumResult",
+			Property:     "key1",
 		}},
 	}, {
 		name: "multiple substitution with param",
 		param: v1beta1.Param{
 			Name:  "param",
-			Value: *v1beta1.NewArrayOrString("$(params.param) $(tasks.sumTask1.results.sumResult) and another $(tasks.sumTask2.results.sumResult)"),
+			Value: *v1beta1.NewArrayOrString("$(params.param) $(tasks.sumTask1.results.sumResult) and another $(tasks.sumTask2.results.sumResult), last one $(tasks.sumTask3.results.sumResult.key1)"),
 		},
 		want: []*v1beta1.ResultRef{{
 			PipelineTask: "sumTask1",
@@ -76,6 +127,10 @@ func TestNewResultReference(t *testing.T) {
 		}, {
 			PipelineTask: "sumTask2",
 			Result:       "sumResult",
+		}, {
+			PipelineTask: "sumTask3",
+			Result:       "sumResult",
+			Property:     "key1",
 		}},
 	}, {
 		name: "first separator typo",
@@ -89,6 +144,13 @@ func TestNewResultReference(t *testing.T) {
 		param: v1beta1.Param{
 			Name:  "param",
 			Value: *v1beta1.NewArrayOrString("$(tasks.sumTasks.result.sumResult)"),
+		},
+		want: nil,
+	}, {
+		name: "more than 5 dot-separated components",
+		param: v1beta1.Param{
+			Name:  "param",
+			Value: *v1beta1.NewArrayOrString("$(tasks.sumTasks.result.sumResult.key.extra)"),
 		},
 		want: nil,
 	}, {
@@ -188,6 +250,26 @@ func TestHasResultReference(t *testing.T) {
 			PipelineTask: "sumTask2",
 			Result:       "sumResult2",
 		}},
+	}, {
+		name: "Test valid expression in object",
+		param: v1beta1.Param{
+			Name: "param",
+			Value: *v1beta1.NewObject(map[string]string{
+				"key1": "$(tasks.sumTask1.results.sumResult1)",
+				"key2": "$(tasks.sumTask2.results.sumResult2) and another one $(tasks.sumTask3.results.sumResult3)",
+				"key3": "no ref here",
+			}),
+		},
+		wantRef: []*v1beta1.ResultRef{{
+			PipelineTask: "sumTask1",
+			Result:       "sumResult1",
+		}, {
+			PipelineTask: "sumTask2",
+			Result:       "sumResult2",
+		}, {
+			PipelineTask: "sumTask3",
+			Result:       "sumResult3",
+		}},
 	}} {
 		t.Run(tt.name, func(t *testing.T) {
 			expressions, ok := v1beta1.GetVarSubstitutionExpressionsForParam(tt.param)
@@ -195,16 +277,15 @@ func TestHasResultReference(t *testing.T) {
 				t.Fatalf("expected to find expressions but didn't find any")
 			}
 			got := v1beta1.NewResultRefs(expressions)
-			sort.Slice(got, func(i, j int) bool {
-				if got[i].PipelineTask > got[j].PipelineTask {
+			if d := cmp.Diff(tt.wantRef, got, cmpopts.SortSlices(func(i, j *v1beta1.ResultRef) bool {
+				if i.PipelineTask > j.PipelineTask {
 					return false
 				}
-				if got[i].Result > got[j].Result {
+				if i.Result > j.Result {
 					return false
 				}
 				return true
-			})
-			if d := cmp.Diff(tt.wantRef, got); d != "" {
+			})); d != "" {
 				t.Error(diff.PrintWantGot(d))
 			}
 		})
@@ -559,13 +640,9 @@ func TestLooksLikeResultRefWhenExpressionFalse(t *testing.T) {
 // returns them all in the expected order.
 func TestPipelineTaskResultRefs(t *testing.T) {
 	pt := v1beta1.PipelineTask{
-		Conditions: []v1beta1.PipelineTaskCondition{{
-			Params: []v1beta1.Param{{
-				Name:  "foo",
-				Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.r1)"),
-			}},
-		}},
 		Params: []v1beta1.Param{{
+			Value: *v1beta1.NewArrayOrString("$(tasks.pt1.results.r1)"),
+		}, {
 			Value: *v1beta1.NewArrayOrString("$(tasks.pt2.results.r2)"),
 		}},
 		WhenExpressions: []v1beta1.WhenExpression{{
@@ -574,6 +651,11 @@ func TestPipelineTaskResultRefs(t *testing.T) {
 			Values: []string{
 				"$(tasks.pt4.results.r4)",
 			},
+		}},
+		Matrix: []v1beta1.Param{{
+			Value: *v1beta1.NewArrayOrString("$(tasks.pt5.results.r5)", "$(tasks.pt6.results.r6)"),
+		}, {
+			Value: *v1beta1.NewArrayOrString("$(tasks.pt7.results.r7)", "$(tasks.pt8.results.r8)"),
 		}},
 	}
 	refs := v1beta1.PipelineTaskResultRefs(&pt)
@@ -589,8 +671,50 @@ func TestPipelineTaskResultRefs(t *testing.T) {
 	}, {
 		PipelineTask: "pt4",
 		Result:       "r4",
+	}, {
+		PipelineTask: "pt5",
+		Result:       "r5",
+	}, {
+		PipelineTask: "pt6",
+		Result:       "r6",
+	}, {
+		PipelineTask: "pt7",
+		Result:       "r7",
+	}, {
+		PipelineTask: "pt8",
+		Result:       "r8",
 	}}
-	if d := cmp.Diff(refs, expectedRefs); d != "" {
+	if d := cmp.Diff(refs, expectedRefs, cmpopts.SortSlices(lessResultRef)); d != "" {
 		t.Errorf("%v", d)
+	}
+}
+
+func lessResultRef(i, j *v1beta1.ResultRef) bool {
+	return i.PipelineTask+i.Result < j.PipelineTask+i.Result
+}
+
+func TestParseResultName(t *testing.T) {
+	tests := []struct {
+		name  string
+		input string
+		want  []string
+	}{{
+		name:  "array indexing",
+		input: "anArrayResult[1]",
+		want:  []string{"anArrayResult", "1"},
+	},
+		{
+			name:  "array star reference",
+			input: "anArrayResult[*]",
+			want:  []string{"anArrayResult", "*"},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			resultName, idx := v1beta1.ParseResultName(tt.input)
+			if d := cmp.Diff(tt.want, []string{resultName, idx}); d != "" {
+				t.Error(diff.PrintWantGot(d))
+			}
+		})
 	}
 }

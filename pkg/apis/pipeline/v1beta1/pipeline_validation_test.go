@@ -129,7 +129,7 @@ func TestPipeline_Validate_Success(t *testing.T) {
 				Results: []PipelineResult{{
 					Name:        "pipeline-result",
 					Description: "this is my pipeline result",
-					Value:       "pipeline-result-default",
+					Value:       *NewArrayOrString("$(tasks.my-task.results.my-result)"),
 				}},
 			},
 		},
@@ -232,27 +232,6 @@ func TestPipelineSpec_Validate_Failure(t *testing.T) {
 		expectedError: apis.FieldError{
 			Message: `expected exactly one, got both`,
 			Paths:   []string{"tasks[1].taskRef", "tasks[1].taskSpec"},
-		},
-	}, {
-		name: "invalid pipeline with one pipeline task having both conditions and when expressions",
-		ps: &PipelineSpec{
-			Description: "this is an invalid pipeline with invalid pipeline task",
-			Tasks: []PipelineTask{{
-				Name:    "invalid-pipeline-task",
-				TaskRef: &TaskRef{Name: "foo-task"},
-				WhenExpressions: []WhenExpression{{
-					Input:    "foo",
-					Operator: selection.In,
-					Values:   []string{"bar"},
-				}},
-				Conditions: []PipelineTaskCondition{{
-					ConditionRef: "some-condition",
-				}},
-			}},
-		},
-		expectedError: apis.FieldError{
-			Message: `expected exactly one, got both`,
-			Paths:   []string{"tasks[0].conditions", "tasks[0].when"},
 		},
 	}, {
 		name: "invalid pipeline with one pipeline task having when expression with invalid operator (not In/NotIn)",
@@ -669,12 +648,6 @@ func TestPipelineSpec_Validate_Failure(t *testing.T) {
 						Name: "some-imagee", Resource: "missing-wonderful-resource",
 					}},
 				},
-				Conditions: []PipelineTaskCondition{{
-					ConditionRef: "some-condition",
-					Resources: []PipelineTaskInputResource{{
-						Name: "some-workspace", Resource: "missing-great-resource",
-					}},
-				}},
 			}, {
 				Name:    "foo",
 				TaskRef: &TaskRef{Name: "foo-task"},
@@ -683,16 +656,10 @@ func TestPipelineSpec_Validate_Failure(t *testing.T) {
 						Name: "some-image", Resource: "wonderful-resource",
 					}},
 				},
-				Conditions: []PipelineTaskCondition{{
-					ConditionRef: "some-condition-2",
-					Resources: []PipelineTaskInputResource{{
-						Name: "some-image", Resource: "wonderful-resource",
-					}},
-				}},
 			}},
 		},
 		expectedError: apis.FieldError{
-			Message: `invalid value: pipeline declared resources didn't match usage in Tasks: Didn't provide required values: [missing-great-resource missing-wonderful-resource missing-great-resource]`,
+			Message: `invalid value: pipeline declared resources didn't match usage in Tasks: Didn't provide required values: [missing-great-resource missing-wonderful-resource]`,
 			Paths:   []string{"resources"},
 		},
 	}, {
@@ -759,6 +726,48 @@ func TestValidatePipelineTasks_Failure(t *testing.T) {
 		expectedError: apis.FieldError{
 			Message: `expected exactly one, got both`,
 			Paths:   []string{"tasks[1].name"},
+		},
+	}, {
+		name: "apiVersion with steps",
+		tasks: []PipelineTask{{
+			Name: "foo",
+			TaskSpec: &EmbeddedTask{
+				TypeMeta: runtime.TypeMeta{
+					APIVersion: "tekton.dev/v1beta1",
+				},
+				TaskSpec: TaskSpec{
+					Steps: []Step{{
+						Name:  "some-step",
+						Image: "some-image",
+					}},
+				},
+			},
+		}},
+		finalTasks: nil,
+		expectedError: apis.FieldError{
+			Message: "taskSpec.apiVersion cannot be specified when using taskSpec.steps",
+			Paths:   []string{"tasks[0].taskSpec.apiVersion"},
+		},
+	}, {
+		name: "kind with steps",
+		tasks: []PipelineTask{{
+			Name: "foo",
+			TaskSpec: &EmbeddedTask{
+				TypeMeta: runtime.TypeMeta{
+					Kind: "Task",
+				},
+				TaskSpec: TaskSpec{
+					Steps: []Step{{
+						Name:  "some-step",
+						Image: "some-image",
+					}},
+				},
+			},
+		}},
+		finalTasks: nil,
+		expectedError: apis.FieldError{
+			Message: "taskSpec.kind cannot be specified when using taskSpec.steps",
+			Paths:   []string{"tasks[0].taskSpec.kind"},
 		},
 	}}
 	for _, tt := range tests {
@@ -839,24 +848,6 @@ func TestValidateFrom_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `invalid value: expected resource great-resource to be from task bar, but task bar doesn't exist`,
-			Paths:   []string{"tasks[1].resources.inputs[0].from"},
-		},
-	}, {
-		name: "invalid pipeline task - pipeline task condition resource does not exist",
-		tasks: []PipelineTask{{
-			Name: "foo", TaskRef: &TaskRef{Name: "foo-task"},
-		}, {
-			Name:    "bar",
-			TaskRef: &TaskRef{Name: "bar-task"},
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition",
-				Resources: []PipelineTaskInputResource{{
-					Name: "some-workspace", Resource: "missing-resource", From: []string{"foo"},
-				}},
-			}},
-		}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: the resource missing-resource from foo must be an output but is an input`,
 			Paths:   []string{"tasks[1].resources.inputs[0].from"},
 		},
 	}, {
@@ -945,12 +936,6 @@ func TestValidateDeclaredResources_Success(t *testing.T) {
 					Name: "some-imagee", Resource: "wonderful-resource",
 				}},
 			},
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition",
-				Resources: []PipelineTaskInputResource{{
-					Name: "some-workspace", Resource: "great-resource",
-				}},
-			}},
 		}, {
 			Name:    "foo",
 			TaskRef: &TaskRef{Name: "foo-task"},
@@ -959,27 +944,6 @@ func TestValidateDeclaredResources_Success(t *testing.T) {
 					Name: "some-image", Resource: "wonderful-resource", From: []string{"bar"},
 				}},
 			},
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition-2",
-				Resources: []PipelineTaskInputResource{{
-					Name: "some-image", Resource: "wonderful-resource", From: []string{"bar"},
-				}},
-			}},
-		}},
-	}, {
-		name: "valid resource declaration with single reference in the pipeline task condition",
-		resources: []PipelineDeclaredResource{{
-			Name: "great-resource", Type: PipelineResourceTypeGit,
-		}},
-		tasks: []PipelineTask{{
-			Name:    "bar",
-			TaskRef: &TaskRef{Name: "bar-task"},
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition",
-				Resources: []PipelineTaskInputResource{{
-					Name: "some-workspace", Resource: "great-resource",
-				}},
-			}},
 		}},
 	}, {
 		name: "valid resource declarations with extra resources, not used in any pipeline task",
@@ -1083,23 +1047,6 @@ func TestValidateDeclaredResources_Failure(t *testing.T) {
 			Message: `invalid value: pipeline declared resources didn't match usage in Tasks: Didn't provide required values: [missing-resource]`,
 			Paths:   []string{"resources"},
 		},
-	}, {
-		name: "invalid condition only resource -" +
-			" pipeline task condition referring to a resource which is missing from resource declarations",
-		tasks: []PipelineTask{{
-			Name:    "bar",
-			TaskRef: &TaskRef{Name: "bar-task"},
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition",
-				Resources: []PipelineTaskInputResource{{
-					Name: "some-workspace", Resource: "missing-resource",
-				}},
-			}},
-		}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: pipeline declared resources didn't match usage in Tasks: Didn't provide required values: [missing-resource]`,
-			Paths:   []string{"resources"},
-		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1153,7 +1100,7 @@ func TestValidateParamResults_Success(t *testing.T) {
 				Name: "output",
 			}},
 			Steps: []Step{{
-				Container: corev1.Container{Name: "foo", Image: "bar"},
+				Name: "foo", Image: "bar",
 			}},
 		}},
 		Name: "a-task",
@@ -1196,7 +1143,11 @@ func TestValidatePipelineResults_Success(t *testing.T) {
 	results := []PipelineResult{{
 		Name:        "my-pipeline-result",
 		Description: "this is my pipeline result",
-		Value:       "$(tasks.a-task.results.output)",
+		Value:       *NewArrayOrString("$(tasks.a-task.results.output)"),
+	}, {
+		Name:        "my-pipeline-object-result",
+		Description: "this is my pipeline result",
+		Value:       *NewArrayOrString("$(tasks.a-task.results.gitrepo.commit)"),
 	}}
 	if err := validatePipelineResults(results); err != nil {
 		t.Errorf("Pipeline.validatePipelineResults() returned error for valid pipeline: %s: %v", desc, err)
@@ -1204,22 +1155,52 @@ func TestValidatePipelineResults_Success(t *testing.T) {
 }
 
 func TestValidatePipelineResults_Failure(t *testing.T) {
-	desc := "invalid pipeline result reference"
-	results := []PipelineResult{{
-		Name:        "my-pipeline-result",
-		Description: "this is my pipeline result",
-		Value:       "$(tasks.a-task.results.output.output)",
+	tests := []struct {
+		desc          string
+		results       []PipelineResult
+		expectedError apis.FieldError
+	}{{
+		desc: "invalid pipeline result reference",
+		results: []PipelineResult{{
+			Name:        "my-pipeline-result",
+			Description: "this is my pipeline result",
+			Value:       *NewArrayOrString("$(tasks.a-task.results.output.key1.extra)"),
+		}},
+		expectedError: apis.FieldError{
+			Message: `invalid value: expected all of the expressions [tasks.a-task.results.output.key1.extra] to be result expressions but only [] were`,
+			Paths:   []string{"results[0].value"},
+		},
+	}, {
+		desc: "invalid pipeline result value with static string",
+		results: []PipelineResult{{
+			Name:        "my-pipeline-result",
+			Description: "this is my pipeline result",
+			Value:       *NewArrayOrString("foo.bar"),
+		}},
+		expectedError: apis.FieldError{
+			Message: `invalid value: expected pipeline results to be task result expressions but no expressions were found`,
+			Paths:   []string{"results[0].value"},
+		},
+	}, {
+		desc: "invalid pipeline result value with invalid expression",
+		results: []PipelineResult{{
+			Name:        "my-pipeline-result",
+			Description: "this is my pipeline result",
+			Value:       *NewArrayOrString("$(foo.bar)"),
+		}},
+		expectedError: apis.FieldError{
+			Message: `invalid value: expected pipeline results to be task result expressions but an invalid expressions was found`,
+			Paths:   []string{"results[0].value"},
+		},
 	}}
-	expectedError := apis.FieldError{
-		Message: `invalid value: expected all of the expressions [tasks.a-task.results.output.output] to be result expressions but only [] were`,
-		Paths:   []string{"results[0].value"},
-	}
-	err := validatePipelineResults(results)
-	if err == nil {
-		t.Errorf("Pipeline.validatePipelineResults() did not return for invalid pipeline: %s", desc)
-	}
-	if d := cmp.Diff(expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
-		t.Errorf("Pipeline.validateParamResults() errors diff %s", diff.PrintWantGot(d))
+	for _, tt := range tests {
+		err := validatePipelineResults(tt.results)
+		if err == nil {
+			t.Errorf("Pipeline.validatePipelineResults() did not return for invalid pipeline: %s", tt.desc)
+		}
+		if d := cmp.Diff(tt.expectedError.Error(), err.Error(), cmpopts.IgnoreUnexported(apis.FieldError{})); d != "" {
+			t.Errorf("Pipeline.validateParamResults() errors diff %s", diff.PrintWantGot(d))
+		}
 	}
 }
 
@@ -1239,7 +1220,7 @@ func TestValidatePipelineParameterVariables_Success(t *testing.T) {
 			Name:    "bar",
 			TaskRef: &TaskRef{Name: "bar-task"},
 			Params: []Param{{
-				Name: "a-param", Value: ArrayOrString{StringVal: "$(baz) and $(foo-is-baz)"},
+				Name: "a-param", Value: ArrayOrString{Type: ParamTypeString, StringVal: "$(params.baz) and $(params.foo-is-baz)"},
 			}},
 		}},
 	}, {
@@ -1289,7 +1270,7 @@ func TestValidatePipelineParameterVariables_Success(t *testing.T) {
 			Name:    "bar",
 			TaskRef: &TaskRef{Name: "bar-task"},
 			Params: []Param{{
-				Name: "a-param", Value: ArrayOrString{ArrayVal: []string{"$(baz)", "and", "$(foo-is-baz)"}},
+				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(params.baz)", "and", "$(params.foo-is-baz)"}},
 			}},
 		}},
 	}, {
@@ -1303,7 +1284,7 @@ func TestValidatePipelineParameterVariables_Success(t *testing.T) {
 			Name:    "bar",
 			TaskRef: &TaskRef{Name: "bar-task"},
 			Params: []Param{{
-				Name: "a-param", Value: ArrayOrString{ArrayVal: []string{"$(baz[*])", "and", "$(foo-is-baz[*])"}},
+				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(params.baz[*])", "and", "$(params.foo-is-baz[*])"}},
 			}},
 		}},
 	}, {
@@ -1315,7 +1296,7 @@ func TestValidatePipelineParameterVariables_Success(t *testing.T) {
 			Name:    "bar",
 			TaskRef: &TaskRef{Name: "bar-task"},
 			Params: []Param{{
-				Name: "a-param", Value: ArrayOrString{StringVal: "$(input.workspace.$(baz))"},
+				Name: "a-param", Value: ArrayOrString{Type: ParamTypeString, StringVal: "$(input.workspace.$(params.baz))"},
 			}},
 		}},
 	}, {
@@ -1329,7 +1310,7 @@ func TestValidatePipelineParameterVariables_Success(t *testing.T) {
 			Name:    "bar",
 			TaskRef: &TaskRef{Name: "bar-task"},
 			Matrix: []Param{{
-				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(baz)", "and", "$(foo-is-baz)"}},
+				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(params.baz)", "and", "$(params.foo-is-baz)"}},
 			}},
 		}},
 	}, {
@@ -1343,13 +1324,14 @@ func TestValidatePipelineParameterVariables_Success(t *testing.T) {
 			Name:    "bar",
 			TaskRef: &TaskRef{Name: "bar-task"},
 			Matrix: []Param{{
-				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(baz[*])", "and", "$(foo-is-baz[*])"}},
+				Name: "a-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(params.baz[*])", "and", "$(params.foo-is-baz[*])"}},
 			}},
 		}},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePipelineParameterVariables(tt.tasks, tt.params)
+			ctx := context.Background()
+			err := validatePipelineParameterVariables(ctx, tt.tasks, tt.params)
 			if err != nil {
 				t.Errorf("Pipeline.validatePipelineParameterVariables() returned error for valid pipeline parameters: %v", err)
 			}
@@ -1487,7 +1469,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `invalid value: invalidtype`,
-			Paths:   []string{"params[foo].type"},
+			Paths:   []string{"params.foo.type"},
 		},
 	}, {
 		name: "array parameter mismatching default type",
@@ -1500,7 +1482,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `"array" type does not match default value's type: "string"`,
-			Paths:   []string{"params[foo].default.type", "params[foo].type"},
+			Paths:   []string{"params.foo.default.type", "params.foo.type"},
 		},
 	}, {
 		name: "string parameter mismatching default type",
@@ -1513,7 +1495,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `"string" type does not match default value's type: "array"`,
-			Paths:   []string{"params[foo].default.type", "params[foo].type"},
+			Paths:   []string{"params.foo.default.type", "params.foo.type"},
 		},
 	}, {
 		name: "array parameter used as string",
@@ -1529,7 +1511,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `"string" type does not match default value's type: "array"`,
-			Paths:   []string{"params[baz].default.type", "params[baz].type"},
+			Paths:   []string{"params.baz.default.type", "params.baz.type"},
 		},
 	}, {
 		name: "star array parameter used as string",
@@ -1545,7 +1527,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `"string" type does not match default value's type: "array"`,
-			Paths:   []string{"params[baz].default.type", "params[baz].type"},
+			Paths:   []string{"params.baz.default.type", "params.baz.type"},
 		},
 	}, {
 		name: "array parameter string template not isolated",
@@ -1561,7 +1543,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `"string" type does not match default value's type: "array"`,
-			Paths:   []string{"params[baz].default.type", "params[baz].type"},
+			Paths:   []string{"params.baz.default.type", "params.baz.type"},
 		},
 	}, {
 		name: "star array parameter string template not isolated",
@@ -1577,7 +1559,7 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `"string" type does not match default value's type: "array"`,
-			Paths:   []string{"params[baz].default.type", "params[baz].type"},
+			Paths:   []string{"params.baz.default.type", "params.baz.type"},
 		},
 	}, {
 		name: "multiple string parameters with the same name",
@@ -1674,7 +1656,8 @@ func TestValidatePipelineParameterVariables_Failure(t *testing.T) {
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := validatePipelineParameterVariables(tt.tasks, tt.params)
+			ctx := context.Background()
+			err := validatePipelineParameterVariables(ctx, tt.tasks, tt.params)
 			if err == nil {
 				t.Errorf("Pipeline.validatePipelineParameterVariables() did not return error for invalid pipeline parameters")
 			}
@@ -1701,21 +1684,41 @@ func TestValidatePipelineWorkspacesDeclarations_Success(t *testing.T) {
 }
 
 func TestValidatePipelineWorkspacesUsage_Success(t *testing.T) {
-	desc := "unused pipeline spec workspaces do not cause an error"
-	workspaces := []PipelineWorkspaceDeclaration{{
-		Name: "foo",
+	tests := []struct {
+		name       string
+		workspaces []PipelineWorkspaceDeclaration
+		tasks      []PipelineTask
+	}{{
+		name: "unused pipeline spec workspaces do not cause an error",
+		workspaces: []PipelineWorkspaceDeclaration{{
+			Name: "foo",
+		}, {
+			Name: "bar",
+		}},
+		tasks: []PipelineTask{{
+			Name: "foo", TaskRef: &TaskRef{Name: "foo"},
+		}},
 	}, {
-		Name: "bar",
+		name: "valid mapping pipeline-task workspace name with pipeline workspace name",
+		workspaces: []PipelineWorkspaceDeclaration{{
+			Name: "pipelineWorkspaceName",
+		}},
+		tasks: []PipelineTask{{
+			Name: "foo", TaskRef: &TaskRef{Name: "foo"},
+			Workspaces: []WorkspacePipelineTaskBinding{{
+				Name:      "pipelineWorkspaceName",
+				Workspace: "",
+			}},
+		}},
 	}}
-	tasks := []PipelineTask{{
-		Name: "foo", TaskRef: &TaskRef{Name: "foo"},
-	}}
-	t.Run(desc, func(t *testing.T) {
-		err := validatePipelineWorkspacesUsage(workspaces, tasks)
-		if err != nil {
-			t.Errorf("Pipeline.validatePipelineWorkspacesUsage() returned error for valid pipeline workspaces: %v", err)
-		}
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			errs := validatePipelineWorkspacesUsage(tt.workspaces, tt.tasks).ViaField("tasks")
+			if errs != nil {
+				t.Errorf("Pipeline.validatePipelineWorkspacesUsage() returned error for valid pipeline workspaces: %v", errs)
+			}
+		})
+	}
 }
 
 func TestValidatePipelineWorkspacesDeclarations_Failure(t *testing.T) {
@@ -1786,6 +1789,22 @@ func TestValidatePipelineWorkspacesUsage_Failure(t *testing.T) {
 			Message: `invalid value: pipeline task "foo" expects workspace with name "pipelineWorkspaceName" but none exists in pipeline spec`,
 			Paths:   []string{"tasks[0].workspaces[0]"},
 		},
+	}, {
+		name: "invalid mapping workspace with different name",
+		workspaces: []PipelineWorkspaceDeclaration{{
+			Name: "pipelineWorkspaceName",
+		}},
+		tasks: []PipelineTask{{
+			Name: "foo", TaskRef: &TaskRef{Name: "foo"},
+			Workspaces: []WorkspacePipelineTaskBinding{{
+				Name:      "taskWorkspaceName",
+				Workspace: "",
+			}},
+		}},
+		expectedError: apis.FieldError{
+			Message: `invalid value: pipeline task "foo" expects workspace with name "taskWorkspaceName" but none exists in pipeline spec`,
+			Paths:   []string{"tasks[0].workspaces[0]"},
+		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1843,12 +1862,6 @@ func TestValidatePipelineWithFinalTasks_Success(t *testing.T) {
 							Name: "some-image", Resource: "wonderful-resource",
 						}},
 					},
-					Conditions: []PipelineTaskCondition{{
-						ConditionRef: "some-condition",
-						Resources: []PipelineTaskInputResource{{
-							Name: "some-workspace", Resource: "great-resource",
-						}},
-					}},
 				}},
 				Finally: []PipelineTask{{
 					Name:    "foo",
@@ -2075,7 +2088,7 @@ func TestValidatePipelineWithFinalTasks_Failure(t *testing.T) {
 			Paths:   []string{"spec.finally[0].params[final-param]"},
 		},
 	}, {
-		name: "invalid pipeline with invalid final tasks with runAfter and conditions",
+		name: "invalid pipeline with invalid final tasks with runAfter",
 		p: &Pipeline{
 			ObjectMeta: metav1.ObjectMeta{Name: "pipeline"},
 			Spec: PipelineSpec{
@@ -2087,21 +2100,12 @@ func TestValidatePipelineWithFinalTasks_Failure(t *testing.T) {
 					Name:     "final-task-1",
 					TaskRef:  &TaskRef{Name: "final-task"},
 					RunAfter: []string{"non-final-task"},
-				}, {
-					Name:    "final-task-2",
-					TaskRef: &TaskRef{Name: "final-task"},
-					Conditions: []PipelineTaskCondition{{
-						ConditionRef: "some-condition",
-					}},
 				}},
 			},
 		},
 		expectedError: *apis.ErrGeneric("").Also(&apis.FieldError{
 			Message: `invalid value: no runAfter allowed under spec.finally, final task final-task-1 has runAfter specified`,
 			Paths:   []string{"spec.finally[0]"},
-		}).Also(&apis.FieldError{
-			Message: `invalid value: no conditions allowed under spec.finally, final task final-task-2 has conditions specified`,
-			Paths:   []string{"spec.finally[1]"},
 		}),
 	}, {
 		name: "invalid pipeline - workspace bindings in final task relying on a non-existent pipeline workspace",
@@ -2241,19 +2245,6 @@ func TestValidateFinalTasks_Failure(t *testing.T) {
 		}},
 		expectedError: apis.FieldError{
 			Message: `invalid value: no runAfter allowed under spec.finally, final task final-task has runAfter specified`,
-			Paths:   []string{"finally[0]"},
-		},
-	}, {
-		name: "invalid pipeline with final task specifying conditions",
-		finalTasks: []PipelineTask{{
-			Name:    "final-task",
-			TaskRef: &TaskRef{Name: "final-task"},
-			Conditions: []PipelineTaskCondition{{
-				ConditionRef: "some-condition",
-			}},
-		}},
-		expectedError: apis.FieldError{
-			Message: `invalid value: no conditions allowed under spec.finally, final task final-task has conditions specified`,
 			Paths:   []string{"finally[0]"},
 		},
 	}, {
@@ -2800,9 +2791,14 @@ func TestMatrixIncompatibleAPIVersions(t *testing.T) {
 				ps := tt.spec
 				featureFlags, _ := config.NewFeatureFlagsFromMap(map[string]string{
 					"enable-api-fields": version,
+					"embedded-status":   "minimal",
 				})
+				defaults := &config.Defaults{
+					DefaultMaxMatrixCombinationsCount: 4,
+				}
 				cfg := &config.Config{
 					FeatureFlags: featureFlags,
+					Defaults:     defaults,
 				}
 
 				ctx := config.ToContext(context.Background(), cfg)
@@ -2899,18 +2895,19 @@ func Test_validateMatrix(t *testing.T) {
 				Name: "b-param", Value: ArrayOrString{Type: ParamTypeArray, ArrayVal: []string{"$(tasks.bar-task.results.b-result)"}},
 			}},
 		}},
-		wantErrs: &apis.FieldError{
-			Message: "invalid value: result references are not allowed in parameters in a matrix",
-			Paths:   []string{"[0].matrix[a-param].value", "[1].matrix[b-param].value"},
-		},
 	}}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			featureFlags, _ := config.NewFeatureFlagsFromMap(map[string]string{
 				"enable-api-fields": "alpha",
+				"embedded-status":   "minimal",
 			})
+			defaults := &config.Defaults{
+				DefaultMaxMatrixCombinationsCount: 4,
+			}
 			cfg := &config.Config{
 				FeatureFlags: featureFlags,
+				Defaults:     defaults,
 			}
 
 			ctx := config.ToContext(context.Background(), cfg)
@@ -3078,7 +3075,7 @@ func Test_validateResultsFromMatrixedPipelineTasksNotConsumed(t *testing.T) {
 func getTaskSpec() TaskSpec {
 	return TaskSpec{
 		Steps: []Step{{
-			Container: corev1.Container{Name: "foo", Image: "bar"},
+			Name: "foo", Image: "bar",
 		}},
 	}
 }
