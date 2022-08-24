@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2012 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1
 
 import (
 	"context"
@@ -31,7 +31,7 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/clock"
 	"knative.dev/pkg/apis"
-	duckv1beta1 "knative.dev/pkg/apis/duck/v1beta1"
+	duckv1 "knative.dev/pkg/apis/duck/v1"
 )
 
 // TaskRunSpec defines the desired state of TaskRun
@@ -41,8 +41,6 @@ type TaskRunSpec struct {
 	// +optional
 	// +listType=atomic
 	Params []Param `json:"params,omitempty"`
-	// +optional
-	Resources *TaskRunResources `json:"resources,omitempty"`
 	// +optional
 	ServiceAccountName string `json:"serviceAccountName"`
 	// no more than one of the TaskRef and TaskSpec may be specified.
@@ -101,8 +99,6 @@ const (
 	// TaskRunCancelledByPipelineMsg indicates that the PipelineRun of which this
 	// TaskRun was a part of has been cancelled.
 	TaskRunCancelledByPipelineMsg TaskRunSpecStatusMessage = "TaskRun cancelled as the PipelineRun it belongs to has been cancelled."
-	// TaskRunCancelledByPipelineTimeoutMsg indicates that the TaskRun was cancelled because the PipelineRun running it timed out.
-	TaskRunCancelledByPipelineTimeoutMsg TaskRunSpecStatusMessage = "TaskRun cancelled as the PipelineRun it belongs to has timed out."
 )
 
 // TaskRunDebug defines the breakpoint config for a particular TaskRun
@@ -116,24 +112,14 @@ type TaskRunDebug struct {
 type TaskRunInputs struct {
 	// +optional
 	// +listType=atomic
-	Resources []TaskResourceBinding `json:"resources,omitempty"`
-	// +optional
-	// +listType=atomic
 	Params []Param `json:"params,omitempty"`
-}
-
-// TaskRunOutputs holds the output values that this task was invoked with.
-type TaskRunOutputs struct {
-	// +optional
-	// +listType=atomic
-	Resources []TaskResourceBinding `json:"resources,omitempty"`
 }
 
 var taskRunCondSet = apis.NewBatchConditionSet()
 
 // TaskRunStatus defines the observed state of TaskRun
 type TaskRunStatus struct {
-	duckv1beta1.Status `json:",inline"`
+	duckv1.Status `json:",inline"`
 
 	// TaskRunStatusFields inlines the status fields.
 	TaskRunStatusFields `json:",inline"`
@@ -225,28 +211,16 @@ type TaskRunStatusFields struct {
 	// +listType=atomic
 	Steps []StepState `json:"steps,omitempty"`
 
-	// CloudEvents describe the state of each cloud event requested via a
-	// CloudEventResource.
-	// +optional
-	// +listType=atomic
-	CloudEvents []CloudEventDelivery `json:"cloudEvents,omitempty"`
-
 	// RetriesStatus contains the history of TaskRunStatus in case of a retry in order to keep record of failures.
 	// All TaskRunStatus stored in RetriesStatus will have no date within the RetriesStatus as is redundant.
 	// +optional
 	// +listType=atomic
 	RetriesStatus []TaskRunStatus `json:"retriesStatus,omitempty"`
 
-	// Results from Resources built during the taskRun. currently includes
-	// the digest of build container images
+	// Results are the list of results written out by the task's containers
 	// +optional
 	// +listType=atomic
-	ResourcesResult []PipelineResourceResult `json:"resourcesResult,omitempty"`
-
-	// TaskRunResults are the list of results written out by the task's containers
-	// +optional
-	// +listType=atomic
-	TaskRunResults []TaskRunResult `json:"taskResults,omitempty"`
+	Results []TaskRunResult `json:"results,omitempty"`
 
 	// The list has one entry per sidecar in the manifest. Each entry is
 	// represents the imageid of the corresponding sidecar.
@@ -318,7 +292,7 @@ func (trs *TaskRunStatus) SetCondition(newCond *apis.Condition) {
 type StepState struct {
 	corev1.ContainerState `json:",inline"`
 	Name                  string `json:"name,omitempty"`
-	ContainerName         string `json:"container,omitempty"`
+	Container             string `json:"container,omitempty"`
 	ImageID               string `json:"imageID,omitempty"`
 }
 
@@ -326,43 +300,8 @@ type StepState struct {
 type SidecarState struct {
 	corev1.ContainerState `json:",inline"`
 	Name                  string `json:"name,omitempty"`
-	ContainerName         string `json:"container,omitempty"`
+	Container             string `json:"container,omitempty"`
 	ImageID               string `json:"imageID,omitempty"`
-}
-
-// CloudEventDelivery is the target of a cloud event along with the state of
-// delivery.
-type CloudEventDelivery struct {
-	// Target points to an addressable
-	Target string                  `json:"target,omitempty"`
-	Status CloudEventDeliveryState `json:"status,omitempty"`
-}
-
-// CloudEventCondition is a string that represents the condition of the event.
-type CloudEventCondition string
-
-const (
-	// CloudEventConditionUnknown means that the condition for the event to be
-	// triggered was not met yet, or we don't know the state yet.
-	CloudEventConditionUnknown CloudEventCondition = "Unknown"
-	// CloudEventConditionSent means that the event was sent successfully
-	CloudEventConditionSent CloudEventCondition = "Sent"
-	// CloudEventConditionFailed means that there was one or more attempts to
-	// send the event, and none was successful so far.
-	CloudEventConditionFailed CloudEventCondition = "Failed"
-)
-
-// CloudEventDeliveryState reports the state of a cloud event to be sent.
-type CloudEventDeliveryState struct {
-	// Current status
-	Condition CloudEventCondition `json:"condition,omitempty"`
-	// SentAt is the time at which the last attempt to send the event was made
-	// +optional
-	SentAt *metav1.Time `json:"sentAt,omitempty"`
-	// Error is the text of error (if any)
-	Error string `json:"message"`
-	// RetryCount is the number of attempts of sending the cloud event
-	RetryCount int32 `json:"retryCount"`
 }
 
 // +genclient
