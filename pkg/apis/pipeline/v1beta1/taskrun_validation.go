@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2022 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1
 
 import (
 	"context"
@@ -65,7 +65,6 @@ func (ts *TaskRunSpec) Validate(ctx context.Context) (errs *apis.FieldError) {
 	// Validate propagated parameters
 	errs = errs.Also(ts.validateInlineParameters(ctx))
 	errs = errs.Also(ValidateWorkspaceBindings(ctx, ts.Workspaces).ViaField("workspaces"))
-	errs = errs.Also(ts.Resources.Validate(ctx).ViaField("resources"))
 	if ts.Debug != nil {
 		errs = errs.Also(version.ValidateEnabledAPIFields(ctx, "debug", config.AlphaAPIFields).ViaField("debug"))
 		errs = errs.Also(validateDebug(ts.Debug).ViaField("debug"))
