@@ -39,14 +39,14 @@ func (tr *TaskRun) ConvertTo(ctx context.Context, to apis.Convertible) error {
 		if err := serializeTaskRunResources(&sink.ObjectMeta, &tr.Spec); err != nil {
 			return err
 		}
-		return tr.Spec.ConvertTo(ctx, &sink.Spec)
+		return tr.Spec.ConvertTo(ctx, &sink.Spec, &sink.ObjectMeta)
 	default:
 		return fmt.Errorf("unknown version, got: %T", sink)
 	}
 }
 
 // ConvertTo implements apis.Convertible
-func (trs *TaskRunSpec) ConvertTo(ctx context.Context, sink *v1.TaskRunSpec) error {
+func (trs *TaskRunSpec) ConvertTo(ctx context.Context, sink *v1.TaskRunSpec, objectMeta *metav1.ObjectMeta) error {
 	if trs.Debug != nil {
 		sink.Debug = &v1.TaskRunDebug{}
 		trs.Debug.convertTo(ctx, sink.Debug)
@@ -59,6 +59,9 @@ func (trs *TaskRunSpec) ConvertTo(ctx context.Context, sink *v1.TaskRunSpec) err
 	}
 	sink.ServiceAccountName = trs.ServiceAccountName
 	if trs.TaskRef != nil {
+		if err := serializeBundle(objectMeta, trs.TaskRef); err != nil {
+			return err
+		}
 		sink.TaskRef = &v1.TaskRef{}
 		trs.TaskRef.convertTo(ctx, sink.TaskRef)
 	}
@@ -106,14 +109,14 @@ func (tr *TaskRun) ConvertFrom(ctx context.Context, from apis.Convertible) error
 		if err := deserializeTaskRunResources(&tr.ObjectMeta, &tr.Spec); err != nil {
 			return err
 		}
-		return tr.Spec.ConvertFrom(ctx, &source.Spec)
+		return tr.Spec.ConvertFrom(ctx, &source.Spec, &tr.ObjectMeta)
 	default:
 		return fmt.Errorf("unknown version, got: %T", tr)
 	}
 }
 
 // ConvertFrom implements apis.Convertible
-func (trs *TaskRunSpec) ConvertFrom(ctx context.Context, source *v1.TaskRunSpec) error {
+func (trs *TaskRunSpec) ConvertFrom(ctx context.Context, source *v1.TaskRunSpec, objectMeta *metav1.ObjectMeta) error {
 	if source.Debug != nil {
 		newDebug := TaskRunDebug{}
 		newDebug.convertFrom(ctx, *source.Debug)
@@ -130,6 +133,9 @@ func (trs *TaskRunSpec) ConvertFrom(ctx context.Context, source *v1.TaskRunSpec)
 		newTaskRef := TaskRef{}
 		newTaskRef.convertFrom(ctx, *source.TaskRef)
 		trs.TaskRef = &newTaskRef
+		if err := deserializeBundle(objectMeta, trs.TaskRef); err != nil {
+			return err
+		}
 	}
 	if source.TaskSpec != nil {
 		newTaskSpec := TaskSpec{}
@@ -209,5 +215,22 @@ func deserializeTaskRunResources(meta *metav1.ObjectMeta, spec *TaskRunSpec) err
 	if resources.Inputs != nil || resources.Outputs != nil {
 		spec.Resources = resources
 	}
+	return nil
+}
+
+func serializeBundle(meta *metav1.ObjectMeta, tr *TaskRef) error {
+	if tr.Bundle == "" {
+		return nil
+	}
+	return version.SerializeToMetadata(meta, tr.Bundle, bundleAnnotationKey)
+}
+
+func deserializeBundle(meta *metav1.ObjectMeta, tr *TaskRef) error {
+	bundle := ""
+	err := version.DeserializeFromMetadata(meta, &bundle, bundleAnnotationKey)
+	if err != nil {
+		return err
+	}
+	tr.Bundle = bundle
 	return nil
 }
