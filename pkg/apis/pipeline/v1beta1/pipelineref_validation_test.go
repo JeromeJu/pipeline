@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Tekton Authors
+Copyright 2022 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1_test
+package v1_test
 
 import (
 	"context"
@@ -71,23 +71,6 @@ func TestPipelineRef_Invalid(t *testing.T) {
 		},
 		wantErr: apis.ErrGeneric("resolver requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\""),
 	}, {
-		name: "pipelineref resource disallowed without alpha feature gate",
-		ref: &v1beta1.PipelineRef{
-			ResolverRef: v1beta1.ResolverRef{
-				Resource: []v1beta1.ResolverParam{},
-			},
-		},
-		wantErr: apis.ErrMissingField("resolver").Also(apis.ErrGeneric("resource requires \"enable-api-fields\" feature gate to be \"alpha\" but it is \"stable\"")),
-	}, {
-		name: "pipelineref resource disallowed without resolver",
-		ref: &v1beta1.PipelineRef{
-			ResolverRef: v1beta1.ResolverRef{
-				Resource: []v1beta1.ResolverParam{},
-			},
-		},
-		wantErr:     apis.ErrMissingField("resolver"),
-		withContext: config.EnableAlphaAPIFields,
-	}, {
 		name: "pipelineref resolver disallowed in conjunction with pipelineref name",
 		ref: &v1beta1.PipelineRef{
 			Name: "foo",
@@ -96,42 +79,6 @@ func TestPipelineRef_Invalid(t *testing.T) {
 			},
 		},
 		wantErr:     apis.ErrMultipleOneOf("name", "resolver"),
-		withContext: config.EnableAlphaAPIFields,
-	}, {
-		name: "pipelineref resolver disallowed in conjunction with pipelineref bundle",
-		ref: &v1beta1.PipelineRef{
-			Bundle: "foo",
-			ResolverRef: v1beta1.ResolverRef{
-				Resolver: "baz",
-			},
-		},
-		wantErr:     apis.ErrMultipleOneOf("bundle", "resolver"),
-		withContext: config.EnableAlphaAPIFields,
-	}, {
-		name: "pipelineref resource disallowed in conjunction with pipelineref name",
-		ref: &v1beta1.PipelineRef{
-			Name: "bar",
-			ResolverRef: v1beta1.ResolverRef{
-				Resource: []v1beta1.ResolverParam{{
-					Name:  "foo",
-					Value: "bar",
-				}},
-			},
-		},
-		wantErr:     apis.ErrMultipleOneOf("name", "resource").Also(apis.ErrMissingField("resolver")),
-		withContext: config.EnableAlphaAPIFields,
-	}, {
-		name: "pipelineref resource disallowed in conjunction with pipelineref bundle",
-		ref: &v1beta1.PipelineRef{
-			Bundle: "bar",
-			ResolverRef: v1beta1.ResolverRef{
-				Resource: []v1beta1.ResolverParam{{
-					Name:  "foo",
-					Value: "bar",
-				}},
-			},
-		},
-		wantErr:     apis.ErrMultipleOneOf("bundle", "resource").Also(apis.ErrMissingField("resolver")),
 		withContext: config.EnableAlphaAPIFields,
 	}}
 
@@ -161,16 +108,6 @@ func TestPipelineRef_Valid(t *testing.T) {
 		name: "alpha feature: valid resolver",
 		ref:  &v1beta1.PipelineRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}},
 		wc:   config.EnableAlphaAPIFields,
-	}, {
-		name: "alpha feature: valid resolver with resource parameters",
-		ref: &v1beta1.PipelineRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git", Resource: []v1beta1.ResolverParam{{
-			Name:  "repo",
-			Value: "https://github.com/tektoncd/pipeline.git",
-		}, {
-			Name:  "branch",
-			Value: "baz",
-		}}}},
-		wc: config.EnableAlphaAPIFields,
 	}}
 
 	for _, ts := range tests {

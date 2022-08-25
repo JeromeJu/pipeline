@@ -1,5 +1,5 @@
 /*
-Copyright 2019 The Tekton Authors
+Copyright 2022 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1
 
 import (
 	"context"
@@ -225,11 +225,6 @@ type PipelineRunSpec struct {
 	PipelineRef *PipelineRef `json:"pipelineRef,omitempty"`
 	// +optional
 	PipelineSpec *PipelineSpec `json:"pipelineSpec,omitempty"`
-	// Resources is a list of bindings specifying which actual instances of
-	// PipelineResources to use for the resources the Pipeline has declared
-	// it needs.
-	// +listType=atomic
-	Resources []PipelineResourceBinding `json:"resources,omitempty"`
 	// Params is a list of parameter names and values.
 	// +listType=atomic
 	Params []Param `json:"params,omitempty"`
