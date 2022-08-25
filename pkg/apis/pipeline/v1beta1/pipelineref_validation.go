@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1
 
 import (
 	"context"
@@ -41,17 +41,6 @@ func (ref *PipelineRef) Validate(ctx context.Context) (errs *apis.FieldError) {
 		}
 		if ref.Bundle != "" {
 			errs = errs.Also(apis.ErrMultipleOneOf("bundle", "resolver"))
-		}
-	case ref.Resource != nil:
-		errs = errs.Also(version.ValidateEnabledAPIFields(ctx, "resource", config.AlphaAPIFields).ViaField("resource"))
-		if ref.Name != "" {
-			errs = errs.Also(apis.ErrMultipleOneOf("name", "resource"))
-		}
-		if ref.Bundle != "" {
-			errs = errs.Also(apis.ErrMultipleOneOf("bundle", "resource"))
-		}
-		if ref.Resolver == "" {
-			errs = errs.Also(apis.ErrMissingField("resolver"))
 		}
 	case ref.Name == "":
 		errs = errs.Also(apis.ErrMissingField("name"))

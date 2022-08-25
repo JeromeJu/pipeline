@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1
+package v1
 
 // PipelineRef can be used to refer to a specific instance of a Pipeline.
 type PipelineRef struct {

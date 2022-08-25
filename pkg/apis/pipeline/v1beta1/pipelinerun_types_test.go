@@ -1,5 +1,5 @@
 /*
-Copyright 2020 The Tekton Authors
+Copyright 2022 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,7 +14,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package v1beta1_test
+package v1_test
 
 import (
 	"context"
@@ -27,12 +27,8 @@ import (
 	"github.com/tektoncd/pipeline/test/diff"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/util/clock"
 	"knative.dev/pkg/apis"
 )
-
-var now = time.Date(2022, time.January, 1, 0, 0, 0, 0, time.UTC)
-var testClock = clock.NewFakePassiveClock(now)
 
 func TestPipelineRunStatusConditions(t *testing.T) {
 	p := &v1beta1.PipelineRun{}
