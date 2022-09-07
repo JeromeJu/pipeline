@@ -59,7 +59,7 @@ func (trs *TaskRunSpec) ConvertTo(ctx context.Context, sink *v1.TaskRunSpec, obj
 	}
 	sink.ServiceAccountName = trs.ServiceAccountName
 	if trs.TaskRef != nil {
-		if err := serializeBundle(objectMeta, trs.TaskRef); err != nil {
+		if err := convertBundle(objectMeta, trs.TaskRef); err != nil {
 			return err
 		}
 		sink.TaskRef = &v1.TaskRef{}
@@ -215,22 +215,5 @@ func deserializeTaskRunResources(meta *metav1.ObjectMeta, spec *TaskRunSpec) err
 	if resources.Inputs != nil || resources.Outputs != nil {
 		spec.Resources = resources
 	}
-	return nil
-}
-
-func serializeBundle(meta *metav1.ObjectMeta, tr *TaskRef) error {
-	if tr.Bundle == "" {
-		return nil
-	}
-	return version.SerializeToMetadata(meta, tr.Bundle, bundleAnnotationKey)
-}
-
-func deserializeBundle(meta *metav1.ObjectMeta, tr *TaskRef) error {
-	bundle := ""
-	err := version.DeserializeFromMetadata(meta, &bundle, bundleAnnotationKey)
-	if err != nil {
-		return err
-	}
-	tr.Bundle = bundle
 	return nil
 }
