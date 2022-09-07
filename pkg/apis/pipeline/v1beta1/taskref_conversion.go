@@ -4,8 +4,6 @@ import (
 	"context"
 
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	"github.com/tektoncd/pipeline/pkg/apis/version"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const bundleAnnotationKey = "tekton.dev/v1beta1Bundle"
@@ -17,6 +15,7 @@ func (tr TaskRef) convertTo(ctx context.Context, sink *v1.TaskRef) {
 	new := v1.ResolverRef{}
 	tr.ResolverRef.convertTo(ctx, &new)
 	sink.ResolverRef = new
+	tr.convertBundleToResolver(sink)
 }
 
 func (tr *TaskRef) convertFrom(ctx context.Context, source v1.TaskRef) {
@@ -28,21 +27,28 @@ func (tr *TaskRef) convertFrom(ctx context.Context, source v1.TaskRef) {
 	tr.ResolverRef = new
 }
 
-// convertBundle converts v1beta1 bundle string to a remote reference with the bundle resolver in v1.
-func (tr *TaskRef) convertBundle() error {
-	if tr.Bundle == "" {
-		return nil
+// convertBundleToResolver converts v1beta1 bundle string to a remote reference with the bundle resolver in v1.
+func (tr TaskRef) convertBundleToResolver(sink *v1.TaskRef) {
+	if tr.Bundle != "" {
+		sink.ResolverRef = v1.ResolverRef{
+			Resolver: "bundles",
+			Params: []v1.Param{{
+				Name:  "bundle",
+				Value: v1.ParamValue{StringVal: tr.Bundle},
+			}, {
+				Name:  "name",
+				Value: v1.ParamValue{StringVal: tr.Name},
+			}, {
+				Name:  "kind",
+				Value: v1.ParamValue{StringVal: tr.Name},
+			}},
+		}
 	}
-
-	return version.SerializeToMetadata(meta, tr.Bundle, bundleAnnotationKey)
 }
 
-func deserializeBundle(meta *metav1.ObjectMeta, tr *TaskRef) error {
-	bundle := ""
-	err := version.DeserializeFromMetadata(meta, &bundle, bundleAnnotationKey)
-	if err != nil {
-		return err
+//
+func (tr *TaskRef) convertResolverToBundle(source v1.TaskRef) {
+	if source.ResolverRef != nil {
+		return nil
 	}
-	tr.Bundle = bundle
-	return nil
 }
