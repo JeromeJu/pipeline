@@ -288,7 +288,10 @@ func TestTaskRunConversionFromDeprecated(t *testing.T) {
 				Namespace: "bar",
 			},
 			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{Bundle: "test-bundle"},
+				TaskRef: &v1beta1.TaskRef{
+					Name:   "test-bundle-name",
+					Bundle: "test-bundle",
+				},
 			},
 		},
 		want: &v1beta1.TaskRun{
@@ -297,7 +300,18 @@ func TestTaskRunConversionFromDeprecated(t *testing.T) {
 				Namespace: "bar",
 			},
 			Spec: v1beta1.TaskRunSpec{
-				TaskRef: &v1beta1.TaskRef{Bundle: "test-bundle"},
+				TaskRef: &v1beta1.TaskRef{
+					Name:   "test-bundle-name",
+					Bundle: "test-bundle",
+					ResolverRef: v1beta1.ResolverRef{
+						Resolver: "bundles",
+						Params: []v1beta1.Param{
+							{Name: "bundle", Value: v1beta1.ParamValue{StringVal: "test-bundle"}},
+							{Name: "name", Value: v1beta1.ParamValue{StringVal: "test-bundle-name"}},
+							{Name: "kind", Value: v1beta1.ParamValue{StringVal: "test-bundle-name"}},
+						},
+					},
+				},
 			},
 		},
 	}}

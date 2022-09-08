@@ -59,9 +59,6 @@ func (trs *TaskRunSpec) ConvertTo(ctx context.Context, sink *v1.TaskRunSpec, obj
 	}
 	sink.ServiceAccountName = trs.ServiceAccountName
 	if trs.TaskRef != nil {
-		if err := convertBundle(objectMeta, trs.TaskRef); err != nil {
-			return err
-		}
 		sink.TaskRef = &v1.TaskRef{}
 		trs.TaskRef.convertTo(ctx, sink.TaskRef)
 	}
@@ -133,9 +130,6 @@ func (trs *TaskRunSpec) ConvertFrom(ctx context.Context, source *v1.TaskRunSpec,
 		newTaskRef := TaskRef{}
 		newTaskRef.convertFrom(ctx, *source.TaskRef)
 		trs.TaskRef = &newTaskRef
-		if err := deserializeBundle(objectMeta, trs.TaskRef); err != nil {
-			return err
-		}
 	}
 	if source.TaskSpec != nil {
 		newTaskSpec := TaskSpec{}

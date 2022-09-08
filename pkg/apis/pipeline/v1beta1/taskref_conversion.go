@@ -25,6 +25,7 @@ func (tr *TaskRef) convertFrom(ctx context.Context, source v1.TaskRef) {
 	new := ResolverRef{}
 	new.convertFrom(ctx, source.ResolverRef)
 	tr.ResolverRef = new
+	tr.convertResolverToBundle(source)
 }
 
 // convertBundleToResolver converts v1beta1 bundle string to a remote reference with the bundle resolver in v1.
@@ -48,7 +49,14 @@ func (tr TaskRef) convertBundleToResolver(sink *v1.TaskRef) {
 
 //
 func (tr *TaskRef) convertResolverToBundle(source v1.TaskRef) {
-	if source.ResolverRef != nil {
-		return nil
+	if source.ResolverRef.Resolver == "bundles" {
+		for _, p := range source.Params {
+			if p.Name == "bundle" {
+				tr.Bundle = p.Value.StringVal
+			}
+			if p.Name == "name" {
+				tr.Name = p.Value.StringVal
+			}
+		}
 	}
 }
