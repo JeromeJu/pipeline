@@ -137,7 +137,7 @@ spec:
       - image: ubuntu
         script: echo task3
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipeline.Name, err)
 	}
 
@@ -157,7 +157,7 @@ spec:
     taskServiceAccountName: sa3
 `, helpers.ObjectNameForTest(t), namespace, pipeline.Name))
 
-	_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
@@ -168,7 +168,7 @@ spec:
 	}
 
 	// Verify it used those serviceAccount
-	taskRuns, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
+	taskRuns, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
 	if err != nil {
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", pipelineRun.Name, err)
 	}
@@ -245,7 +245,7 @@ spec:
       - image: ubuntu
         script: echo task1
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipeline.Name, err)
 	}
 
@@ -265,7 +265,7 @@ spec:
       dnsPolicy: %s
 `, helpers.ObjectNameForTest(t), namespace, pipeline.Name, dnsPolicy))
 
-	if _, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
 
@@ -275,7 +275,7 @@ spec:
 	}
 
 	// Verify it used those serviceAccount
-	taskRuns, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
+	taskRuns, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
 	if err != nil {
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", pipelineRun.Name, err)
 	}

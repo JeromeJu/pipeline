@@ -89,7 +89,7 @@ func TestPropagatedParams(t *testing.T) {
 			t.Logf("Setting up test resources for %q test in namespace %s", td.name, namespace)
 			pipelineRun, expectedResolvedPipelineRun, expectedTaskRuns := td.pipelineRunFunc(t, namespace)
 			prName := pipelineRun.Name
-			_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+			_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 			}
@@ -98,7 +98,7 @@ func TestPropagatedParams(t *testing.T) {
 			if err := WaitForPipelineRunState(ctx, c, prName, timeout, PipelineRunSucceed(prName), "PipelineRunSuccess"); err != nil {
 				t.Fatalf("Error waiting for PipelineRun %s to finish: %s", prName, err)
 			}
-			cl, _ := c.PipelineRunClient.Get(ctx, prName, metav1.GetOptions{})
+			cl, _ := c.V1beta1PipelineRunClient.Get(ctx, prName, metav1.GetOptions{})
 			d := cmp.Diff(expectedResolvedPipelineRun, cl,
 				ignoreTypeMeta,
 				ignoreObjectMeta,
@@ -114,7 +114,7 @@ func TestPropagatedParams(t *testing.T) {
 			}
 			for _, tr := range expectedTaskRuns {
 				t.Logf("Checking Taskrun %s", tr.Name)
-				taskrun, _ := c.TaskRunClient.Get(ctx, tr.Name, metav1.GetOptions{})
+				taskrun, _ := c.V1beta1TaskRunClient.Get(ctx, tr.Name, metav1.GetOptions{})
 				d = cmp.Diff(tr, taskrun,
 					ignoreTypeMeta,
 					ignoreObjectMeta,

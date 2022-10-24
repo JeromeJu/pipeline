@@ -48,7 +48,7 @@ func TestEntrypointRunningStepsInOrder(t *testing.T) {
 	epTaskRunName := helpers.ObjectNameForTest(t)
 
 	t.Logf("Creating TaskRun in namespace %s", namespace)
-	if _, err := c.TaskRunClient.Create(ctx, parse.MustParseTaskRun(t, fmt.Sprintf(`
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, parse.MustParseTaskRun(t, fmt.Sprintf(`
 metadata:
   name: %s
   namespace: %s

@@ -73,27 +73,27 @@ func TestHelmDeployPipelineRun(t *testing.T) {
 	}
 
 	t.Logf("Creating Task %s", createImageTaskName)
-	if _, err := c.TaskClient.Create(ctx, getCreateImageTask(t, namespace, createImageTaskName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, getCreateImageTask(t, namespace, createImageTaskName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", createImageTaskName, err)
 	}
 
 	t.Logf("Creating Task %s", helmDeployTaskName)
-	if _, err := c.TaskClient.Create(ctx, getHelmDeployTask(t, namespace, helmDeployTaskName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, getHelmDeployTask(t, namespace, helmDeployTaskName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", helmDeployTaskName, err)
 	}
 
 	t.Logf("Creating Task %s", checkServiceTaskName)
-	if _, err := c.TaskClient.Create(ctx, getCheckServiceTask(t, namespace, checkServiceTaskName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, getCheckServiceTask(t, namespace, checkServiceTaskName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", checkServiceTaskName, err)
 	}
 
 	t.Logf("Creating Pipeline %s", helmDeployPipelineName)
-	if _, err := c.PipelineClient.Create(ctx, getHelmDeployPipeline(t, namespace, createImageTaskName, helmDeployTaskName, checkServiceTaskName, helmDeployPipelineName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, getHelmDeployPipeline(t, namespace, createImageTaskName, helmDeployTaskName, checkServiceTaskName, helmDeployPipelineName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", helmDeployPipelineName, err)
 	}
 
 	t.Logf("Creating PipelineRun %s", helmDeployPipelineRunName)
-	if _, err := c.PipelineRunClient.Create(ctx, getHelmDeployPipelineRun(t, namespace, sourceResourceName, sourceImageName, helmDeployPipelineRunName, helmDeployPipelineName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, getHelmDeployPipelineRun(t, namespace, sourceResourceName, sourceImageName, helmDeployPipelineRunName, helmDeployPipelineName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", helmDeployPipelineRunName, err)
 	}
 
@@ -347,12 +347,12 @@ spec:
 `, helmRemoveAllTaskRunName, namespace, helmRemoveAllTaskName))
 
 	t.Logf("Creating Task %s", helmRemoveAllTaskName)
-	if _, err := c.TaskClient.Create(ctx, helmRemoveAllTask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, helmRemoveAllTask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", helmRemoveAllTaskName, err)
 	}
 
 	t.Logf("Creating TaskRun %s", helmRemoveAllTaskRunName)
-	if _, err := c.TaskRunClient.Create(ctx, helmRemoveAllTaskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, helmRemoveAllTaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", helmRemoveAllTaskRunName, err)
 	}
 

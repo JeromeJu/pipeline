@@ -77,12 +77,12 @@ spec:
       #!/usr/bin/env bash
       echo "$(params.HELLO)"
 `, namespace))
-			if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 			}
 
 			p := getUpdatedStatusSpecPipeline(t, namespace, task.Name)
-			if _, err := c.PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Pipeline `%s`: %s", p.Name, err)
 			}
 
@@ -112,7 +112,7 @@ spec:
 
 			pipelineRun := td.pipelineRunFunc(t, i, namespace, p.Name, resources)
 			prName := pipelineRun.Name
-			_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+			_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 			}
@@ -122,7 +122,7 @@ spec:
 				t.Fatalf("Error waiting for PipelineRun %s to finish: %s", prName, err)
 			}
 			t.Logf("Making sure the expected TaskRuns %s were created", td.expectedTaskRuns)
-			actualTaskrunList, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", prName)})
+			actualTaskrunList, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", prName)})
 			if err != nil {
 				t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", prName, err)
 			}
@@ -136,7 +136,7 @@ spec:
 					}
 				}
 				expectedTaskRunNames = append(expectedTaskRunNames, taskRunName)
-				r, err := c.TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
+				r, err := c.V1beta1TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
 				if err != nil {
 					t.Fatalf("Couldn't get expected TaskRun %s: %s", taskRunName, err)
 				}
@@ -162,11 +162,11 @@ spec:
 				t.Fatalf("Expected %d number of successful events from pipelinerun and taskrun but got %d; list of receieved events : %#v", td.expectedNumberOfEvents, len(events), collectedEvents)
 			}
 			t.Log("Checking if parameter replacements have been updated in the spec.")
-			cl, _ := c.PipelineRunClient.Get(ctx, prName, metav1.GetOptions{})
+			cl, _ := c.V1beta1PipelineRunClient.Get(ctx, prName, metav1.GetOptions{})
 			if cl.Status.PipelineSpec.Tasks[0].Params[0].Value.StringVal != "Hello World!" {
 				t.Fatalf(`Expected replaced parameter value %s but found %s`, "Hello World!", cl.Status.PipelineSpec.Tasks[0].Params[0].Value.StringVal)
 			}
-			tl, _ := c.TaskRunClient.Get(ctx, "pipeline-task-update-task1", metav1.GetOptions{})
+			tl, _ := c.V1beta1TaskRunClient.Get(ctx, "pipeline-task-update-task1", metav1.GetOptions{})
 			if !strings.Contains(tl.Status.TaskSpec.Steps[0].Script, "Hello World!") {
 				t.Fatalf(`Expected replaced parameter value : %s in Script: %s But not found`, "Hello World!", tl.Status.TaskSpec.Steps[0].Script)
 			}
@@ -191,7 +191,7 @@ func TestPipelineRun(t *testing.T) {
 			t.Helper()
 			tasks := getFanInFanOutTasks(t, namespace)
 			for _, task := range tasks {
-				if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+				if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 					t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 				}
 			}
@@ -204,7 +204,7 @@ func TestPipelineRun(t *testing.T) {
 			}
 
 			p := getFanInFanOutPipeline(t, namespace, tasks)
-			if _, err := c.PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Pipeline `%s`: %s", p.Name, err)
 			}
 
@@ -243,11 +243,11 @@ spec:
     command: ['skopeo']
     args: ['copy', '$(params["the.path"])', '$(params["the.dest"])']
 `, helpers.ObjectNameForTest(t), namespace))
-			if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 			}
 			p := getHelloWorldPipelineWithSingularTask(t, namespace, task.Name)
-			if _, err := c.PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Pipeline `%s`: %s", p.Name, err)
 			}
 
@@ -290,12 +290,12 @@ spec:
     command: ['skopeo']
     args: ['copy', '$(params["the.path"])', '$(params["the.dest"])']
 `, helpers.ObjectNameForTest(t), namespace))
-			if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Task `%s`: %s", fmt.Sprint("task", index), err)
 			}
 
 			p := getHelloWorldPipelineWithSingularTask(t, namespace, task.Name)
-			if _, err := c.PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
+			if _, err := c.V1beta1PipelineClient.Create(ctx, p, metav1.CreateOptions{}); err != nil {
 				t.Fatalf("Failed to create Pipeline `%s`: %s", p.Name, err)
 			}
 
@@ -325,7 +325,7 @@ spec:
 
 			pipelineRun := td.pipelineRunFunc(t, i, namespace, p.Name, resources)
 			prName := pipelineRun.Name
-			_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+			_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 			}
@@ -335,7 +335,7 @@ spec:
 				t.Fatalf("Error waiting for PipelineRun %s to finish: %s", prName, err)
 			}
 			t.Logf("Making sure the expected TaskRuns %s were created", td.expectedTaskRuns)
-			actualTaskrunList, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", prName)})
+			actualTaskrunList, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", prName)})
 			if err != nil {
 				t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", prName, err)
 			}
@@ -349,7 +349,7 @@ spec:
 					}
 				}
 				expectedTaskRunNames = append(expectedTaskRunNames, taskRunName)
-				r, err := c.TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
+				r, err := c.V1beta1TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
 				if err != nil {
 					t.Fatalf("Couldn't get expected TaskRun %s: %s", taskRunName, err)
 				}
@@ -485,7 +485,7 @@ spec:
           # Sleep for another 10s
           sleep 10
 `, pipelineName))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipelineName, err)
 	}
 
@@ -496,7 +496,7 @@ spec:
   pipelineRef:
     name: %s
 `, prName, pipelineName))
-	_, err := c.PipelineRunClient.Create(ctx, pipelinerun, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelinerun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 	}
@@ -506,7 +506,7 @@ spec:
 		t.Fatalf("Error waiting for PipelineRun %s to finish: %s", prName, err)
 	}
 
-	if err := c.PipelineClient.Delete(ctx, pipeline.Name, metav1.DeleteOptions{}); err != nil {
+	if err := c.V1beta1PipelineClient.Delete(ctx, pipeline.Name, metav1.DeleteOptions{}); err != nil {
 		t.Fatalf("Failed to delete Pipeline `%s`: %s", pipeline.Name, err)
 	}
 
@@ -536,7 +536,7 @@ func TestPipelineRunPending(t *testing.T) {
 
 	t.Logf("Creating Task, Pipeline, and Pending PipelineRun %s in namespace %s", prName, namespace)
 
-	if _, err := c.TaskClient.Create(ctx, parse.MustParseTask(t, fmt.Sprintf(`
+	if _, err := c.V1beta1TaskClient.Create(ctx, parse.MustParseTask(t, fmt.Sprintf(`
 metadata:
   name: %s
   namespace: %s
@@ -549,7 +549,7 @@ spec:
 		t.Fatalf("Failed to create Task `%s`: %s", taskName, err)
 	}
 
-	if _, err := c.PipelineClient.Create(ctx, parse.MustParsePipeline(t, fmt.Sprintf(`
+	if _, err := c.V1beta1PipelineClient.Create(ctx, parse.MustParsePipeline(t, fmt.Sprintf(`
 metadata:
   name: %s
   namespace: %s
@@ -562,7 +562,7 @@ spec:
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipelineName, err)
 	}
 
-	pipelineRun, err := c.PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
+	pipelineRun, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
 metadata:
   name: %s
   namespace: %s
@@ -582,7 +582,7 @@ spec:
 
 	t.Logf("Clearing pending status on PipelineRun %s", prName)
 
-	pipelineRun, err = c.PipelineRunClient.Get(ctx, prName, metav1.GetOptions{})
+	pipelineRun, err = c.V1beta1PipelineRunClient.Get(ctx, prName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Error getting PipelineRun %s: %s", prName, err)
 	}
@@ -593,7 +593,7 @@ spec:
 
 	pipelineRun.Spec.Status = ""
 
-	if _, err := c.PipelineRunClient.Update(ctx, pipelineRun, metav1.UpdateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Update(ctx, pipelineRun, metav1.UpdateOptions{}); err != nil {
 		t.Fatalf("Error clearing pending status on PipelineRun %s: %s", prName, err)
 	}
 
@@ -902,11 +902,11 @@ func checkLabelPropagation(ctx context.Context, t *testing.T, c *clients, namesp
 	labels := make(map[string]string, 4)
 
 	// Check label propagation to PipelineRuns.
-	pr, err := c.PipelineRunClient.Get(ctx, pipelineRunName, metav1.GetOptions{})
+	pr, err := c.V1beta1PipelineRunClient.Get(ctx, pipelineRunName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected PipelineRun for %s: %s", tr.Name, err)
 	}
-	p, err := c.PipelineClient.Get(ctx, pr.Spec.PipelineRef.Name, metav1.GetOptions{})
+	p, err := c.V1beta1PipelineClient.Get(ctx, pr.Spec.PipelineRef.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected Pipeline for %s: %s", pr.Name, err)
 	}
@@ -924,7 +924,7 @@ func checkLabelPropagation(ctx context.Context, t *testing.T, c *clients, namesp
 	// This label is added to every TaskRun by the PipelineRun controller
 	labels[pipeline.PipelineRunLabelKey] = pr.Name
 	if tr.Spec.TaskRef != nil {
-		task, err := c.TaskClient.Get(ctx, tr.Spec.TaskRef.Name, metav1.GetOptions{})
+		task, err := c.V1beta1TaskClient.Get(ctx, tr.Spec.TaskRef.Name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Couldn't get expected Task for %s: %s", tr.Name, err)
 		}
@@ -953,11 +953,11 @@ func checkAnnotationPropagation(ctx context.Context, t *testing.T, c *clients, n
 	annotations := make(map[string]string)
 
 	// Check annotation propagation to PipelineRuns.
-	pr, err := c.PipelineRunClient.Get(ctx, pipelineRunName, metav1.GetOptions{})
+	pr, err := c.V1beta1PipelineRunClient.Get(ctx, pipelineRunName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected PipelineRun for %s: %s", tr.Name, err)
 	}
-	p, err := c.PipelineClient.Get(ctx, pr.Spec.PipelineRef.Name, metav1.GetOptions{})
+	p, err := c.V1beta1PipelineClient.Get(ctx, pr.Spec.PipelineRef.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected Pipeline for %s: %s", pr.Name, err)
 	}
@@ -971,7 +971,7 @@ func checkAnnotationPropagation(ctx context.Context, t *testing.T, c *clients, n
 		annotations[key] = val
 	}
 	if tr.Spec.TaskRef != nil {
-		task, err := c.TaskClient.Get(ctx, tr.Spec.TaskRef.Name, metav1.GetOptions{})
+		task, err := c.V1beta1TaskClient.Get(ctx, tr.Spec.TaskRef.Name, metav1.GetOptions{})
 		if err != nil {
 			t.Fatalf("Couldn't get expected Task for %s: %s", tr.Name, err)
 		}

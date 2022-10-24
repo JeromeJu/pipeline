@@ -72,13 +72,13 @@ func TestKanikoTaskRun(t *testing.T) {
 
 	task := getTask(t, repo, namespace)
 	t.Logf("Creating Task %s", task.Name)
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 	}
 
 	tr := getTaskRun(t, namespace, task.Name, git.Name, image.Name)
 	t.Logf("Creating TaskRun %s", tr.Name)
-	if _, err := c.TaskRunClient.Create(ctx, tr, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, tr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", tr.Name, err)
 	}
 
@@ -88,7 +88,7 @@ func TestKanikoTaskRun(t *testing.T) {
 		t.Errorf("Error waiting for TaskRun %s to finish: %s", tr.Name, err)
 	}
 
-	tr, err := c.TaskRunClient.Get(ctx, tr.Name, metav1.GetOptions{})
+	tr, err := c.V1beta1TaskRunClient.Get(ctx, tr.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Error retrieving taskrun: %s", err)
 	}

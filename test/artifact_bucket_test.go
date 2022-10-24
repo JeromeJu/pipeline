@@ -99,7 +99,7 @@ spec:
 `, helpers.ObjectNameForTest(t), namespace, bucketName, bucketSecretName, bucketSecretName, bucketSecretKey, bucketSecretName))
 
 	t.Logf("Creating Task %s", createbuckettask.Name)
-	if _, err := c.TaskClient.Create(ctx, createbuckettask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, createbuckettask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", createbuckettask.Name, err)
 	}
 
@@ -113,7 +113,7 @@ spec:
 `, helpers.ObjectNameForTest(t), namespace, createbuckettask.Name))
 
 	t.Logf("Creating TaskRun %s", createbuckettaskrun.Name)
-	if _, err := c.TaskRunClient.Create(ctx, createbuckettaskrun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, createbuckettaskrun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", createbuckettaskrun.Name, err)
 	}
 
@@ -179,7 +179,7 @@ spec:
     name: make-executable
     script: chmod +x /workspace/helloworldgit/newfile
 `, addFileTaskName, namespace, helloworldResourceName, helloworldResourceName))
-	if _, err := c.TaskClient.Create(ctx, addFileTask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, addFileTask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", addFileTaskName, err)
 	}
 
@@ -198,7 +198,7 @@ spec:
     image: ubuntu
     name: runfile
 `, runFileTaskName, namespace, helloworldResourceName))
-	if _, err := c.TaskClient.Create(ctx, readFileTask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, readFileTask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", runFileTaskName, err)
 	}
 
@@ -230,7 +230,7 @@ spec:
     taskRef:
       name: %s
 `, bucketTestPipelineName, namespace, addFileTaskName, runFileTaskName))
-	if _, err := c.PipelineClient.Create(ctx, bucketTestPipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, bucketTestPipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", bucketTestPipelineName, err)
 	}
 
@@ -247,7 +247,7 @@ spec:
     resourceRef:
       name: %s
 `, bucketTestPipelineRunName, namespace, bucketTestPipelineName, helloworldResourceName))
-	if _, err := c.PipelineRunClient.Create(ctx, bucketTestPipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, bucketTestPipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", bucketTestPipelineRunName, err)
 	}
 
@@ -332,7 +332,7 @@ spec:
 `, helpers.ObjectNameForTest(t), namespace, bucketName, bucketSecretName, bucketSecretKey, bucketSecretName, bucketSecretName))
 
 	t.Logf("Creating Task %s", deletelbuckettask.Name)
-	if _, err := c.TaskClient.Create(ctx, deletelbuckettask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, deletelbuckettask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", deletelbuckettask.Name, err)
 	}
 
@@ -346,7 +346,7 @@ spec:
 `, helpers.ObjectNameForTest(t), namespace, deletelbuckettask.Name))
 
 	t.Logf("Creating TaskRun %s", deletelbuckettaskrun.Name)
-	if _, err := c.TaskRunClient.Create(ctx, deletelbuckettaskrun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, deletelbuckettaskrun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", deletelbuckettaskrun.Name, err)
 	}
 

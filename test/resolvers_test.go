@@ -121,7 +121,7 @@ spec:
             value: "true"
 `, prName, namespace))
 
-	_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 	}
@@ -181,7 +181,7 @@ spec:
             value: "true"
 `, prName, namespace))
 
-	_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 	}
@@ -245,7 +245,7 @@ spec:
             value: "true"
 `, prName, namespace))
 
-	_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 	}
@@ -346,7 +346,7 @@ spec:
             value: "true"
 `, prName, namespace, url, pathInRepo, commit))
 
-			_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+			_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 			if err != nil {
 				t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 			}
@@ -392,7 +392,7 @@ spec:
           sleep 10
 `, pipelineName, namespace))
 
-	_, err := c.PipelineClient.Create(ctx, examplePipeline, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineClient.Create(ctx, examplePipeline, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipelineName, err)
 	}
@@ -415,7 +415,7 @@ spec:
       value: %s
 `, prName, namespace, pipelineName, namespace))
 
-	_, err = c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+	_, err = c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 	}
@@ -453,7 +453,7 @@ spec:
       value: %s
 `, prName, namespace, namespace))
 
-	_, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
+	_, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", prName, err)
 	}
@@ -519,7 +519,7 @@ spec:
       value: %s
 `, trName, namespace, scmRemoteBranch, scmRemoteTaskPath, scmRemoteOrg, scmRemoteRepo))
 
-	_, err = c.TaskRunClient.Create(ctx, tr, metav1.CreateOptions{})
+	_, err = c.V1beta1TaskRunClient.Create(ctx, tr, metav1.CreateOptions{})
 	if err != nil {
 		t.Fatalf("Failed to create TaskRun: %v", err)
 	}
@@ -599,7 +599,7 @@ spec:
 		scmGiteaAdminPassword, giteaInternalHostname, giteaUserJSON,
 		scmRemoteUser, scmRemoteUserPassword, giteaInternalHostname))
 
-	if _, err := c.TaskRunClient.Create(ctx, giteaConfigTaskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, giteaConfigTaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create gitea user setup TaskRun: %s", err)
 	}
 
@@ -608,7 +608,7 @@ spec:
 		t.Fatalf("Error waiting for gitea user setup TaskRun to finish: %s", err)
 	}
 
-	tr, err := c.TaskRunClient.Get(ctx, trName, metav1.GetOptions{})
+	tr, err := c.V1beta1TaskRunClient.Get(ctx, trName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected gitea user setup TaskRun %s: %s", trName, err)
 	}

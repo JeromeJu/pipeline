@@ -68,7 +68,7 @@ spec:
     command: ['/bin/sh']
     args: ['-c', 'sleep 30s']
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task: %s", err)
 	}
 	taskRun := parse.MustParseTaskRun(t, fmt.Sprintf(`
@@ -79,7 +79,7 @@ spec:
   taskRef:
     name: %s
 `, taskRunName, namespace, task.Name))
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun: %s", err)
 	}
 
@@ -88,7 +88,7 @@ spec:
 		t.Errorf("Error waiting for TaskRun to finish: %s", err)
 	}
 
-	taskrun, err := c.TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
+	taskrun, err := c.V1beta1TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected TaskRun %s: %s", taskRunName, err)
 	}
@@ -160,7 +160,7 @@ spec:
     command: ['/bin/sh']
     args: ['-c', 'echo hello']
 `, helpers.ObjectNameForTest(t), namespace, fqImageName))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task: %s", err)
 	}
 	taskRun := parse.MustParseTaskRun(t, fmt.Sprintf(`
@@ -171,7 +171,7 @@ spec:
   taskRef:
     name: %s
 `, taskRunName, namespace, task.Name))
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun: %s", err)
 	}
 
@@ -180,7 +180,7 @@ spec:
 		t.Errorf("Error waiting for TaskRun to finish: %s", err)
 	}
 
-	taskrun, err := c.TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
+	taskrun, err := c.V1beta1TaskRunClient.Get(ctx, taskRunName, metav1.GetOptions{})
 	if err != nil {
 		t.Fatalf("Couldn't get expected TaskRun %s: %s", taskRunName, err)
 	}

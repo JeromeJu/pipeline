@@ -54,10 +54,10 @@ func TestTaskRun_EmbeddedResource(t *testing.T) {
 	embedTaskRunName := helpers.ObjectNameForTest(t)
 
 	t.Logf("Creating Task and TaskRun in namespace %s", namespace)
-	if _, err := c.TaskClient.Create(ctx, getEmbeddedTask(t, embedTaskName, namespace, []string{"/bin/sh", "-c", fmt.Sprintf("echo %s", taskOutput)}), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, getEmbeddedTask(t, embedTaskName, namespace, []string{"/bin/sh", "-c", fmt.Sprintf("echo %s", taskOutput)}), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", embedTaskName, err)
 	}
-	if _, err := c.TaskRunClient.Create(ctx, getEmbeddedTaskRun(t, embedTaskRunName, namespace, embedTaskName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, getEmbeddedTaskRun(t, embedTaskRunName, namespace, embedTaskName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", embedTaskRunName, err)
 	}
 

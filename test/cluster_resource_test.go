@@ -68,12 +68,12 @@ func TestClusterResource(t *testing.T) {
 	}
 
 	t.Logf("Creating Task %s", taskName)
-	if _, err := c.TaskClient.Create(ctx, getClusterResourceTask(t, namespace, taskName, configName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, getClusterResourceTask(t, namespace, taskName, configName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", taskName, err)
 	}
 
 	t.Logf("Creating TaskRun %s", taskRunName)
-	if _, err := c.TaskRunClient.Create(ctx, getClusterResourceTaskRun(t, namespace, taskRunName, taskName, resourceName), metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, getClusterResourceTaskRun(t, namespace, taskRunName, taskName, resourceName), metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Taskrun `%s`: %s", taskRunName, err)
 	}
 

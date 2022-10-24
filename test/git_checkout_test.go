@@ -125,7 +125,7 @@ func TestGitPipelineRun(t *testing.T) {
 			}
 
 			t.Logf("Creating PipelineRun %s", gitTestPipelineRunName)
-			if _, err := c.PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
+			if _, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
 metadata:
   name: %s
 spec:
@@ -208,7 +208,7 @@ func TestGitPipelineRunFail(t *testing.T) {
 			}
 
 			t.Logf("Creating PipelineRun %s", gitTestPipelineRunName)
-			if _, err := c.PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
+			if _, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
 metadata:
   name: %s
 spec:
@@ -239,7 +239,7 @@ spec:
 			}
 
 			if err := WaitForPipelineRunState(ctx, c, gitTestPipelineRunName, timeout, PipelineRunSucceed(gitTestPipelineRunName), "PipelineRunCompleted"); err != nil {
-				taskruns, err := c.TaskRunClient.List(ctx, metav1.ListOptions{})
+				taskruns, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{})
 				if err != nil {
 					t.Errorf("Error getting TaskRun list for PipelineRun %s %s", gitTestPipelineRunName, err)
 				}

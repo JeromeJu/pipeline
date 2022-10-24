@@ -153,7 +153,7 @@ spec:
     name: %s
     bundle: %s
 `, pipelineRunName, pipelineName, repo))
-	if _, err := c.PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun: %s", err)
 	}
 
@@ -162,7 +162,7 @@ spec:
 		t.Errorf("Error waiting for PipelineRun to finish with error: %s", err)
 	}
 
-	trs, err := c.TaskRunClient.List(ctx, metav1.ListOptions{})
+	trs, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error retrieving taskrun: %s", err)
 	}
@@ -301,7 +301,7 @@ spec:
     - name: kind
       value: pipeline
 `, pipelineRunName, repo, pipelineName))
-	if _, err := c.PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun: %s", err)
 	}
 
@@ -310,7 +310,7 @@ spec:
 		t.Errorf("Error waiting for PipelineRun to finish with error: %s", err)
 	}
 
-	trs, err := c.TaskRunClient.List(ctx, metav1.ListOptions{})
+	trs, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{})
 	if err != nil {
 		t.Errorf("Error retrieving taskrun: %s", err)
 	}
@@ -413,7 +413,7 @@ spec:
     name: %s
     bundle: %s
 `, pipelineRunName, pipelineName, repo))
-	if _, err := c.PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun: %s", err)
 	}
 
@@ -524,7 +524,7 @@ spec:
     name: %s
     bundle: %s
 `, pipelineRunName, pipelineName, repo))
-	if _, err := c.PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pr, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun: %s", err)
 	}
 

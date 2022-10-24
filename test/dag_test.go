@@ -40,14 +40,15 @@ const sleepDuration = 15 * time.Second
 
 // TestDAGPipelineRun creates a graph of arbitrary Tasks, then looks at the corresponding
 // TaskRun start times to ensure they were run in the order intended, which is:
-//                               |
-//                        pipeline-task-1
-//                       /               \
-//   pipeline-task-2-parallel-1    pipeline-task-2-parallel-2
-//                       \                /
-//                        pipeline-task-3
-//                               |
-//                        pipeline-task-4
+//
+//	                            |
+//	                     pipeline-task-1
+//	                    /               \
+//	pipeline-task-2-parallel-1    pipeline-task-2-parallel-2
+//	                    \                /
+//	                     pipeline-task-3
+//	                            |
+//	                     pipeline-task-4
 func TestDAGPipelineRun(t *testing.T) {
 	ctx := context.Background()
 	ctx, cancel := context.WithCancel(ctx)
@@ -84,7 +85,7 @@ spec:
   - image: busybox
     script: 'ln -s $(resources.inputs.repo.path) $(resources.outputs.repo.path)'
 `, helpers.ObjectNameForTest(t), namespace, int(sleepDuration.Seconds())))
-	if _, err := c.TaskClient.Create(ctx, echoTask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, echoTask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create echo Task: %s", err)
 	}
 
@@ -188,7 +189,7 @@ spec:
     taskRef:
       name: %s
 `, helpers.ObjectNameForTest(t), namespace, echoTask.Name, echoTask.Name, echoTask.Name, echoTask.Name, echoTask.Name))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create dag-pipeline: %s", err)
 	}
 	pipelineRun := parse.MustParsePipelineRun(t, fmt.Sprintf(`
@@ -203,7 +204,7 @@ spec:
     resourceRef:
       name: %s
 `, helpers.ObjectNameForTest(t), namespace, pipeline.Name, repoResource.Name))
-	if _, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create dag-pipeline-run PipelineRun: %s", err)
 	}
 	t.Logf("Waiting for DAG pipeline to complete")
@@ -211,7 +212,7 @@ spec:
 		t.Fatalf("Error waiting for PipelineRun to finish: %s", err)
 	}
 
-	verifyExpectedOrder(ctx, t, c.TaskRunClient, pipelineRun.Name)
+	verifyExpectedOrder(ctx, t, c.V1beta1TaskRunClient, pipelineRun.Name)
 }
 
 func verifyExpectedOrder(ctx context.Context, t *testing.T, c clientset.TaskRunInterface, prName string) {

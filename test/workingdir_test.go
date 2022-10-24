@@ -56,7 +56,7 @@ spec:
     workingDir: /workspace/HELLOMOTO
     args: ['-c', 'echo YES']
 `, wdTaskName, namespace))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task: %s", err)
 	}
 
@@ -70,7 +70,7 @@ spec:
     name: %s
   serviceAccountName: default
 `, wdTaskRunName, namespace, wdTaskName))
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun: %s", err)
 	}
 
@@ -79,7 +79,7 @@ spec:
 		t.Errorf("Error waiting for TaskRun to finish successfully: %s", err)
 	}
 
-	tr, err := c.TaskRunClient.Get(ctx, wdTaskRunName, metav1.GetOptions{})
+	tr, err := c.V1beta1TaskRunClient.Get(ctx, wdTaskRunName, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Error retrieving taskrun: %s", err)
 	}
@@ -129,7 +129,7 @@ spec:
     workingDir: /HELLOMOTO
     args: ['-c', 'echo YES']
 `, wdTaskName, namespace))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task: %s", err)
 	}
 
@@ -143,7 +143,7 @@ spec:
     name: %s
   serviceAccountName: default
 `, wdTaskRunName, namespace, wdTaskName))
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun: %s", err)
 	}
 
@@ -152,7 +152,7 @@ spec:
 		t.Errorf("Error waiting for TaskRun to finish successfully: %s", err)
 	}
 
-	tr, err := c.TaskRunClient.Get(ctx, wdTaskRunName, metav1.GetOptions{})
+	tr, err := c.V1beta1TaskRunClient.Get(ctx, wdTaskRunName, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Error retrieving taskrun: %s", err)
 	}

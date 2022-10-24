@@ -62,7 +62,7 @@ spec:
     command: ['/bin/sh']
     args: ['-c', 'sleep 10']
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 	}
 
@@ -85,10 +85,10 @@ spec:
     name: %s
   timeout: 5s
 `, helpers.ObjectNameForTest(t), namespace, pipeline.Name))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipeline.Name, err)
 	}
-	if _, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
 
@@ -97,7 +97,7 @@ spec:
 		t.Errorf("Error waiting for PipelineRun %s to finish: %s", pipelineRun.Name, err)
 	}
 
-	taskrunList, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
+	taskrunList, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
 	if err != nil {
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", pipelineRun.Name, err)
 	}
@@ -121,7 +121,7 @@ spec:
 	}
 	wg.Wait()
 
-	if _, err := c.PipelineRunClient.Get(ctx, pipelineRun.Name, metav1.GetOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Get(ctx, pipelineRun.Name, metav1.GetOptions{}); err != nil {
 		t.Fatalf("Failed to get PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
 
@@ -145,10 +145,10 @@ spec:
   pipelineRef:
     name: %s
 `, helpers.ObjectNameForTest(t), namespace, secondPipeline.Name))
-	if _, err := c.PipelineClient.Create(ctx, secondPipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, secondPipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", secondPipeline.Name, err)
 	}
-	if _, err := c.PipelineRunClient.Create(ctx, secondPipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, secondPipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", secondPipelineRun.Name, err)
 	}
 
@@ -190,7 +190,7 @@ spec:
       script: sleep 1
 `, helpers.ObjectNameForTest(t), namespace))
 	t.Logf("Creating TaskRun %s in namespace %s", taskRun.Name, namespace)
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", taskRun.Name, err)
 	}
 
@@ -201,7 +201,7 @@ spec:
 		t.Errorf("Expected: %s", failMsg)
 	}
 
-	tr, err := c.TaskRunClient.Get(ctx, taskRun.Name, metav1.GetOptions{})
+	tr, err := c.V1beta1TaskRunClient.Get(ctx, taskRun.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Error getting Taskrun: %v", err)
 	}
@@ -245,7 +245,7 @@ spec:
         timeout: 1ms`)
 
 	t.Logf("Creating TaskRun %s in namespace %s", taskRun.Name, namespace)
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", taskRun.Name, err)
 	}
 
@@ -279,7 +279,7 @@ spec:
     command: ['/bin/sh']
     args: ['-c', 'sleep 3000']
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 	}
 	taskRun := parse.MustParseTaskRun(t, fmt.Sprintf(`
@@ -291,7 +291,7 @@ spec:
     name: %s
   timeout: %s
 `, helpers.ObjectNameForTest(t), namespace, task.Name, timeout))
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun `%s`: %s", taskRun.Name, err)
 	}
 
@@ -300,7 +300,7 @@ spec:
 		t.Errorf("Error waiting for TaskRun %s to finish: %s", taskRun.Name, err)
 	}
 
-	tr, err := c.TaskRunClient.Get(ctx, taskRun.Name, metav1.GetOptions{})
+	tr, err := c.V1beta1TaskRunClient.Get(ctx, taskRun.Name, metav1.GetOptions{})
 	if err != nil {
 		t.Errorf("Error retrieving TaskRun %s: %v", taskRun.Name, err)
 	}
@@ -346,10 +346,10 @@ spec:
     args: ['-c', 'sleep 10s']
 `, helpers.ObjectNameForTest(t), namespace))
 
-	if _, err := c.TaskClient.Create(ctx, task1, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task1, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", task1.Name, err)
 	}
-	if _, err := c.TaskClient.Create(ctx, task2, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task2, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", task2.Name, err)
 	}
 
@@ -377,10 +377,10 @@ spec:
     name: %s
 `, helpers.ObjectNameForTest(t), namespace, pipeline.Name))
 
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipeline.Name, err)
 	}
-	if _, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
 
@@ -389,7 +389,7 @@ spec:
 		t.Fatalf("Error waiting for PipelineRun %s to finish: %s", pipelineRun.Name, err)
 	}
 
-	taskrunList, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
+	taskrunList, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
 	if err != nil {
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", pipelineRun.Name, err)
 	}
@@ -456,7 +456,7 @@ spec:
     command: ['/bin/sh']
     args: ['-c', 'sleep 30']
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", task.Name, err)
 	}
 
@@ -471,7 +471,7 @@ spec:
     command: ['/bin/sh']
     args: ['-c', 'sleep 1']
 `, helpers.ObjectNameForTest(t), namespace))
-	if _, err := c.TaskClient.Create(ctx, fTask, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, fTask, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task `%s`: %s", fTask.Name, err)
 	}
 
@@ -501,10 +501,10 @@ spec:
     tasks: 20s
     finally: 20s
 `, helpers.ObjectNameForTest(t), namespace, pipeline.Name))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipeline.Name, err)
 	}
-	if _, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
 
@@ -513,7 +513,7 @@ spec:
 		t.Errorf("Error waiting for PipelineRun %s to finish: %s", pipelineRun.Name, err)
 	}
 
-	taskrunList, err := c.TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
+	taskrunList, err := c.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{LabelSelector: fmt.Sprintf("tekton.dev/pipelineRun=%s", pipelineRun.Name)})
 	if err != nil {
 		t.Fatalf("Error listing TaskRuns for PipelineRun %s: %s", pipelineRun.Name, err)
 	}

@@ -53,7 +53,7 @@ spec:
   - name: foo
     image: busybox
     command: ['ls', '-la']`, helpers.ObjectNameForTest(t)))
-	if _, err := c.TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskClient.Create(ctx, task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Task: %s", err)
 	}
 	taskRun := parse.MustParseTaskRun(t, fmt.Sprintf(`
@@ -63,7 +63,7 @@ spec:
   taskRef:
     name: %s
   serviceAccountName: inexistent`, helpers.ObjectNameForTest(t), task.Name))
-	if _, err := c.TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1TaskRunClient.Create(ctx, taskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create TaskRun: %s", err)
 	}
 
@@ -80,7 +80,7 @@ spec:
   - name: foo
     taskRef:
       name: %s`, helpers.ObjectNameForTest(t), task.Name))
-	if _, err := c.PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineClient.Create(ctx, pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipeline.Name, err)
 	}
 	pipelineRun := parse.MustParsePipelineRun(t, fmt.Sprintf(`
@@ -90,7 +90,7 @@ spec:
   pipelineRef:
     name: %s
   serviceAccountName: inexistent`, helpers.ObjectNameForTest(t), pipeline.Name))
-	if _, err := c.PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
+	if _, err := c.V1beta1PipelineRunClient.Create(ctx, pipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create PipelineRun `%s`: %s", pipelineRun.Name, err)
 	}
 
