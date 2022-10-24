@@ -125,7 +125,11 @@ func TestGitPipelineRun(t *testing.T) {
 			}
 
 			t.Logf("Creating PipelineRun %s", gitTestPipelineRunName)
+<<<<<<< HEAD
 			if _, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParseV1beta1PipelineRun(t, fmt.Sprintf(`
+=======
+			if _, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
+>>>>>>> 7739ecbdf (Add v1 conversion integration test)
 metadata:
   name: %s
 spec:
@@ -208,7 +212,11 @@ func TestGitPipelineRunFail(t *testing.T) {
 			}
 
 			t.Logf("Creating PipelineRun %s", gitTestPipelineRunName)
+<<<<<<< HEAD
 			if _, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParseV1beta1PipelineRun(t, fmt.Sprintf(`
+=======
+			if _, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
+>>>>>>> 7739ecbdf (Add v1 conversion integration test)
 metadata:
   name: %s
 spec:

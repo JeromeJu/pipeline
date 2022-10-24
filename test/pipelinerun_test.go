@@ -549,11 +549,11 @@ spec:
 		t.Fatalf("Failed to create Task `%s`: %s", taskName, err)
 	}
 
+<<<<<<< HEAD
 	if _, err := c.V1beta1PipelineClient.Create(ctx, parse.MustParseV1beta1Pipeline(t, fmt.Sprintf(`
+=======
+	if _, err := c.V1beta1PipelineClient.Create(ctx, parse.MustParsePipeline(t, fmt.Sprintf(`
 metadata:
-  name: %s
-  namespace: %s
-spec:
   tasks:
   - name: task
     taskRef:
@@ -562,7 +562,11 @@ spec:
 		t.Fatalf("Failed to create Pipeline `%s`: %s", pipelineName, err)
 	}
 
+<<<<<<< HEAD
 	pipelineRun, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParseV1beta1PipelineRun(t, fmt.Sprintf(`
+=======
+	pipelineRun, err := c.V1beta1PipelineRunClient.Create(ctx, parse.MustParsePipelineRun(t, fmt.Sprintf(`
+>>>>>>> 7739ecbdf (Add v1 conversion integration test)
 metadata:
   name: %s
   namespace: %s
