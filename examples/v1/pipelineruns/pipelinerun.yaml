@@ -14,7 +14,7 @@ roleRef:
   name: cluster-admin
   apiGroup: rbac.authorization.k8s.io
 ---
-apiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: "unit.tests"
@@ -36,7 +36,10 @@ spec:
       # we are now pinning the version of Skaffold we pull) or use Tekton Pipelines unit tests.
       echo "pass"
 ---
-apiVersion: tekton.dev/v1
+# Copied from https://github.com/tektoncd/catalog/blob/v1beta1/git/git-clone.yaml
+# With a few fixes being ported over in https://github.com/tektoncd/catalog/pull/290
+# Post #1839 we can refer to the remote Task in a registry or post #2298 in git directly
+apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: git-clone
@@ -116,8 +119,77 @@ spec:
       # Make sure we don't add a trailing newline to the result!
       echo -n "$RESULT_SHA" > $(results.commit.path)
 ---
+# Copied from https://github.com/tektoncd/catalog/blob/v1beta1/kaniko/kaniko.yaml
+# with a few fixes that will be port over in https://github.com/tektoncd/catalog/pull/291
+# Post #1839 we can refer to the remote Task in a registry or post #2298 in git directly
+apiVersion: tekton.dev/v1beta1
+kind: Task
+metadata:
+  name: kaniko
+spec:
+  workspaces:
+  - name: source
+  params:
+  - name: IMAGE
+    description: Name (reference) of the image to build.
+  - name: DOCKERFILE
+    description: Path to the Dockerfile to build.
+    default: ./Dockerfile
+  - name: CONTEXT
+    description: The build context used by Kaniko.
+    default: ./
+  - name: EXTRA_ARGS
+    default: ""
+  - name: BUILDER_IMAGE
+    description: The image on which builds will run
+    default: gcr.io/kaniko-project/executor:v1.8.1
+  - name: baseImage
+    description: Base image for GoogleContainerTools/skaffold microservice apps
+    default: BASE=alpine:3.9
+  results:
+  - name: IMAGE_DIGEST
+    description: Digest of the image just built.
+  steps:
+  - name: build-and-push
+    workingDir: $(workspaces.source.path)
+    image: $(params.BUILDER_IMAGE)
+    # specifying DOCKER_CONFIG is required to allow kaniko to detect docker credential
+    # https://github.com/tektoncd/pipeline/pull/706
+    env:
+    - name: DOCKER_CONFIG
+      value: /tekton/home/.docker
+    command:
+    - /kaniko/executor
+    - $(params.EXTRA_ARGS)
+    - --dockerfile=$(params.DOCKERFILE)
+    - --context=$(workspaces.source.path)/$(params.CONTEXT)  # The user does not need to care the workspace and the source.
+    - --destination=$(params.IMAGE)
+    - --oci-layout-path=$(workspaces.source.path)/$(params.CONTEXT)/image-digest
+    - --build-arg=$(inputs.params.baseImage)
+    - --ignore-path=/product_uuid # TODO(abayer): Work around Kaniko multi-stage build issues on Kind: https://github.com/GoogleContainerTools/kaniko/issues/2164
+    # kaniko assumes it is running as root, which means this example fails on platforms
+    # that default to run containers as random uid (like OpenShift). Adding this securityContext
+    # makes it explicit that it needs to run as root.
+    securityContext:
+      runAsUser: 0
+  - name: write-digest
+    workingDir: $(workspaces.source.path)
+    image: gcr.io/tekton-releases/github.com/tektoncd/pipeline/cmd/imagedigestexporter:latest
+    # output of imagedigestexport [{"name":"image","digest":"sha256:eed29..660"}]
+    command: ["/ko-app/imagedigestexporter"]
+    securityContext:
+      runAsUser: 0
+    args:
+    - -images=[{"name":"$(params.IMAGE)","type":"image","url":"$(params.IMAGE)","digest":"","OutputImageDir":"$(workspaces.source.path)/$(params.CONTEXT)/image-digest"}]
+    - -terminationMessagePath=$(params.CONTEXT)/image-digested
+  - name: digest-to-results
+    workingDir: $(workspaces.source.path)
+    image: stedolan/jq
+    script: |
+      cat $(params.CONTEXT)/image-digested | jq '.[0].value' -rj | tee /tekton/results/IMAGE_DIGEST
+---
 # This task deploys with kubectl apply -f <filename>
-apiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1beta1
 kind: Task
 metadata:
   name: demo-deploy-kubectl
@@ -154,7 +226,7 @@ spec:
 ---
 # This Pipeline Builds two microservice images(https://github.com/GoogleContainerTools/skaffold/tree/master/examples/microservices)
 # from the Skaffold repo (https://github.com/GoogleContainerTools/skaffold) and deploys them to the repo currently running Tekton Pipelines.
-apiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1beta1
 kind: Pipeline
 metadata:
   name: "demo.pipeline"
@@ -186,16 +258,7 @@ spec:
   - name: build-skaffold-web
     runAfter: [skaffold-unit-tests]
     taskRef:
-      resolver: git
-      params:
-      - name: org
-        value: tektoncd
-      - name: repo
-        value: catalog
-      - name: revision
-        value: v1beta1
-      - name: pathInRepo
-        value: kaniko/kaniko.yaml
+      name: kaniko
     params:
     - name: IMAGE
       value: $(params.image-registry)/leeroy-web
@@ -209,16 +272,7 @@ spec:
   - name: build-skaffold-app
     runAfter: [skaffold-unit-tests]
     taskRef:
-      resolver: git
-      params:
-      - name: org
-        value: tektoncd
-      - name: repo
-        value: catalog
-      - name: revision
-        value: v1beta1
-      - name: pathInRepo
-        value: kaniko/kaniko.yaml
+      name: kaniko
     params:
     - name: IMAGE
       value: $(params.image-registry)/leeroy-app
@@ -260,15 +314,14 @@ spec:
     - name: source
       workspace: git-source
 ---
-apiVersion: tekton.dev/v1
+apiVersion: tekton.dev/v1beta1
 kind: PipelineRun
 metadata:
   name: demo-pipeline-run-1
 spec:
   pipelineRef:
     name: "demo.pipeline"
-  taskRunTemplate:
-    serviceAccountName: 'default'
+  serviceAccountName: 'default'
   workspaces:
   - name: git-source
     volumeClaimTemplate:
