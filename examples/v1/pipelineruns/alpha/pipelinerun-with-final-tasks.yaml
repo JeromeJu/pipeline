@@ -41,16 +41,16 @@ spec:
     # Clone app repo to workspace
     - name: clone-app-repo
       taskRef:
-        resolver: git
+        resolver: hub
         params:
-        - name: org
-          value: tektoncd
-        - name: repo
-          value: catalog
-        - name: revision
-          value: v1beta1
-        - name: pathInRepo
-          value: git/git-clone.yaml
+          - name: type  #optional
+            value: artifact
+          - name: kind  #optional
+            value: task
+          - name: name
+            value: git-clone
+          - name: version
+            value: "0.9"
       params:
         - name: url
           value: https://github.com/tektoncd/community.git
