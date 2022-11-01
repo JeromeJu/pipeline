@@ -43,10 +43,8 @@ spec:
       taskRef:
         resolver: git
         params:
-        - name: org
-          value: tektoncd
-        - name: repo
-          value: catalog
+        - name: url
+          value: https://github.com/tektoncd/catalog.git
         - name: revision
           value: v1beta1
         - name: pathInRepo
