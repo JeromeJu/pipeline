@@ -13,7 +13,7 @@ func (tr TaskRef) convertTo(ctx context.Context, sink *v1.TaskRef) {
 	sink.Kind = v1.TaskKind(tr.Kind)
 	sink.APIVersion = tr.APIVersion
 	new := v1.ResolverRef{}
-	tr.ResolverRef.convertTo(ctx, &new)
+	tr.ResolverRef.ConvertTo(ctx, &new)
 	sink.ResolverRef = new
 	tr.convertBundleToResolver(sink)
 }
@@ -23,7 +23,7 @@ func (tr *TaskRef) convertFrom(ctx context.Context, source v1.TaskRef) {
 	tr.Kind = TaskKind(source.Kind)
 	tr.APIVersion = source.APIVersion
 	new := ResolverRef{}
-	new.convertFrom(ctx, source.ResolverRef)
+	new.ConvertFrom(ctx, source.ResolverRef)
 	tr.ResolverRef = new
 }
 

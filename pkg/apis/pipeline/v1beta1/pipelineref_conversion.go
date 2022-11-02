@@ -12,7 +12,7 @@ func (pr PipelineRef) convertTo(ctx context.Context, sink *v1.PipelineRef) {
 	}
 	sink.APIVersion = pr.APIVersion
 	new := v1.ResolverRef{}
-	pr.ResolverRef.convertTo(ctx, &new)
+	pr.ResolverRef.ConvertTo(ctx, &new)
 	sink.ResolverRef = new
 	pr.convertBundleToResolver(sink)
 }
@@ -21,7 +21,7 @@ func (pr *PipelineRef) convertFrom(ctx context.Context, source v1.PipelineRef) {
 	pr.Name = source.Name
 	pr.APIVersion = source.APIVersion
 	new := ResolverRef{}
-	new.convertFrom(ctx, source.ResolverRef)
+	new.ConvertFrom(ctx, source.ResolverRef)
 	pr.ResolverRef = new
 }
 

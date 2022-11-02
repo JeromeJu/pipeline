@@ -6,7 +6,7 @@ import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 )
 
-func (rr ResolverRef) convertTo(ctx context.Context, sink *v1.ResolverRef) {
+func (rr ResolverRef) ConvertTo(ctx context.Context, sink *v1.ResolverRef) {
 	sink.Resolver = v1.ResolverName(rr.Resolver)
 	sink.Params = nil
 	for _, r := range rr.Params {
@@ -16,7 +16,7 @@ func (rr ResolverRef) convertTo(ctx context.Context, sink *v1.ResolverRef) {
 	}
 }
 
-func (rr *ResolverRef) convertFrom(ctx context.Context, source v1.ResolverRef) {
+func (rr *ResolverRef) ConvertFrom(ctx context.Context, source v1.ResolverRef) {
 	rr.Resolver = ResolverName(source.Resolver)
 	rr.Params = nil
 	for _, r := range source.Params {
