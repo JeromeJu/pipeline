@@ -609,7 +609,7 @@ func TestTaskCRDConversion(t *testing.T) {
 	defer tearDown(ctx, t, c, namespace)
 
 	v1beta1TaskName := helpers.ObjectNameForTest(t)
-	v1beta1Task := parse.MustParseTask(t, fmt.Sprintf(v1beta1TaskYaml, v1beta1TaskName, namespace))
+	v1beta1Task := parse.MustParseV1beta1Task(t, fmt.Sprintf(v1beta1TaskYaml, v1beta1TaskName, namespace))
 	v1TaskExpected := parse.MustParseV1Task(t, fmt.Sprintf(v1TaskYaml, v1beta1TaskName, namespace))
 
 	if _, err := c.V1beta1TaskClient.Create(ctx, v1beta1Task, metav1.CreateOptions{}); err != nil {
@@ -627,7 +627,7 @@ func TestTaskCRDConversion(t *testing.T) {
 
 	v1TaskName := helpers.ObjectNameForTest(t)
 	v1Task := parse.MustParseV1Task(t, fmt.Sprintf(v1TaskYaml, v1TaskName, namespace))
-	v1beta1TaskExpected := parse.MustParseTask(t, fmt.Sprintf(v1beta1TaskYaml, v1TaskName, namespace))
+	v1beta1TaskExpected := parse.MustParseV1beta1Task(t, fmt.Sprintf(v1beta1TaskYaml, v1TaskName, namespace))
 
 	if _, err := c.V1TaskClient.Create(ctx, v1Task, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1beta1 Task: %s", err)
@@ -659,7 +659,7 @@ func TestTaskRunCRDConversion(t *testing.T) {
 	defer tearDown(ctx, t, c, namespace)
 
 	v1beta1TaskRunName := helpers.ObjectNameForTest(t)
-	v1beta1TaskRun := parse.MustParseTaskRun(t, fmt.Sprintf(v1beta1TaskRunYaml, v1beta1TaskRunName, namespace))
+	v1beta1TaskRun := parse.MustParseV1beta1TaskRun(t, fmt.Sprintf(v1beta1TaskRunYaml, v1beta1TaskRunName, namespace))
 	v1TaskRunExpected := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunYaml, v1beta1TaskRunName, namespace))
 
 	if _, err := c.V1beta1TaskRunClient.Create(ctx, v1beta1TaskRun, metav1.CreateOptions{}); err != nil {
@@ -677,7 +677,7 @@ func TestTaskRunCRDConversion(t *testing.T) {
 
 	v1TaskRunName := helpers.ObjectNameForTest(t)
 	v1TaskRun := parse.MustParseV1TaskRun(t, fmt.Sprintf(v1TaskRunYaml, v1TaskRunName, namespace))
-	v1beta1TaskRunExpected := parse.MustParseTaskRun(t, fmt.Sprintf(v1beta1TaskRunExpectedYaml, v1TaskRunName, namespace))
+	v1beta1TaskRunExpected := parse.MustParseV1beta1TaskRun(t, fmt.Sprintf(v1beta1TaskRunExpectedYaml, v1TaskRunName, namespace))
 
 	if _, err := c.V1TaskRunClient.Create(ctx, v1TaskRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1beta1 Task: %s", err)
@@ -709,7 +709,7 @@ func TestPipelineCRDConversion(t *testing.T) {
 	defer tearDown(ctx, t, c, namespace)
 
 	v1beta1PipelineName := helpers.ObjectNameForTest(t)
-	v1beta1Pipeline := parse.MustParsePipeline(t, fmt.Sprintf(v1beta1PipelineYaml, v1beta1PipelineName, namespace))
+	v1beta1Pipeline := parse.MustParseV1beta1Pipeline(t, fmt.Sprintf(v1beta1PipelineYaml, v1beta1PipelineName, namespace))
 	v1PipelineExpected := parse.MustParseV1Pipeline(t, fmt.Sprintf(v1PipelineYaml, v1beta1PipelineName, namespace))
 
 	if _, err := c.V1beta1PipelineClient.Create(ctx, v1beta1Pipeline, metav1.CreateOptions{}); err != nil {
@@ -727,7 +727,7 @@ func TestPipelineCRDConversion(t *testing.T) {
 
 	v1PipelineName := helpers.ObjectNameForTest(t)
 	v1Pipeline := parse.MustParseV1Pipeline(t, fmt.Sprintf(v1PipelineYaml, v1PipelineName, namespace))
-	v1beta1PipelineExpected := parse.MustParsePipeline(t, fmt.Sprintf(v1beta1PipelineYaml, v1PipelineName, namespace))
+	v1beta1PipelineExpected := parse.MustParseV1beta1Pipeline(t, fmt.Sprintf(v1beta1PipelineYaml, v1PipelineName, namespace))
 
 	if _, err := c.V1PipelineClient.Create(ctx, v1Pipeline, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1beta1 Task: %s", err)
@@ -759,7 +759,7 @@ func TestPipelineRunCRDConversion(t *testing.T) {
 	defer tearDown(ctx, t, c, namespace)
 
 	v1beta1PipelineRunName := helpers.ObjectNameForTest(t)
-	v1beta1PipelineRun := parse.MustParsePipelineRun(t, fmt.Sprintf(v1beta1PipelineRunYaml, v1beta1PipelineRunName, namespace))
+	v1beta1PipelineRun := parse.MustParseV1beta1PipelineRun(t, fmt.Sprintf(v1beta1PipelineRunYaml, v1beta1PipelineRunName, namespace))
 	v1PipelineRunExpected := parse.MustParseV1PipelineRun(t, fmt.Sprintf(v1PipelineRunYaml, v1beta1PipelineRunName, namespace))
 
 	if _, err := c.V1beta1PipelineRunClient.Create(ctx, v1beta1PipelineRun, metav1.CreateOptions{}); err != nil {
@@ -777,7 +777,7 @@ func TestPipelineRunCRDConversion(t *testing.T) {
 
 	v1PipelineRunName := helpers.ObjectNameForTest(t)
 	v1PipelineRun := parse.MustParseV1PipelineRun(t, fmt.Sprintf(v1PipelineRunYaml, v1PipelineRunName, namespace))
-	v1beta1PipelineRunExpected := parse.MustParsePipelineRun(t, fmt.Sprintf(v1beta1PipelineRunExpectedYaml, v1PipelineRunName, namespace))
+	v1beta1PipelineRunExpected := parse.MustParseV1beta1PipelineRun(t, fmt.Sprintf(v1beta1PipelineRunExpectedYaml, v1PipelineRunName, namespace))
 
 	if _, err := c.V1PipelineRunClient.Create(ctx, v1PipelineRun, metav1.CreateOptions{}); err != nil {
 		t.Fatalf("Failed to create v1beta1 Task: %s", err)
