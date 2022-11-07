@@ -101,11 +101,20 @@ func tearDown(ctx context.Context, t *testing.T, cs *clients, namespace string) 
 			t.Log(string(bs))
 		}
 		header(t, fmt.Sprintf("Dumping logs from Pods in the %s", namespace))
-		taskruns, err := cs.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{})
+		v1beta1Taskruns, err := cs.V1beta1TaskRunClient.List(ctx, metav1.ListOptions{})
 		if err != nil {
-			t.Errorf("Error getting TaskRun list %s", err)
+			t.Errorf("Error getting v1beta1TaskRun list %s", err)
 		}
-		for _, tr := range taskruns.Items {
+		for _, tr := range v1beta1Taskruns.Items {
+			if tr.Status.PodName != "" {
+				CollectPodLogs(ctx, cs, tr.Status.PodName, namespace, t.Logf)
+			}
+		}
+		v1Taskruns, err := cs.V1TaskRunClient.List(ctx, metav1.ListOptions{})
+		if err != nil {
+			t.Errorf("Error getting v1TaskRun list %s", err)
+		}
+		for _, tr := range v1Taskruns.Items {
 			if tr.Status.PodName != "" {
 				CollectPodLogs(ctx, cs, tr.Status.PodName, namespace, t.Logf)
 			}
