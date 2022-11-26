@@ -56,10 +56,23 @@ func waitValidatePipelineRunDone(ctx context.Context, t *testing.T, c *clients, 
 	}
 }
 
+func waitValidateV1PipelineRunDone(ctx context.Context, t *testing.T, c *clients, pipelineRunName string) {
+	if err := WaitForV1PipelineRunState(ctx, c, pipelineRunName, timeout, Succeed(pipelineRunName), pipelineRunName); err != nil {
+		t.Fatalf("Failed waiting for V1 pipeline run done: %v", err)
+	}
+}
+
 func waitValidateTaskRunDone(ctx context.Context, t *testing.T, c *clients, taskRunName string) {
 	// Per test basis
 	if err := WaitForTaskRunState(ctx, c, taskRunName, Succeed(taskRunName), taskRunName); err != nil {
 		t.Fatalf("Failed waiting for task run done: %v", err)
+	}
+}
+
+func waitValidateV1TaskRunDone(ctx context.Context, t *testing.T, c *clients, taskRunName string) {
+	// Per test basis
+	if err := WaitForV1TaskRunState(ctx, c, taskRunName, Succeed(taskRunName), taskRunName); err != nil {
+		t.Fatalf("Failed waiting for V1 task run done: %v", err)
 	}
 }
 
@@ -237,10 +250,16 @@ func testYamls(t *testing.T, baseDir string, createFunc createFunc, filter pathF
 		path := path // capture range variable
 		testName := extractTestName(baseDir, path)
 		waitValidateFunc := waitValidatePipelineRunDone
+		if strings.Contains(path, "/v1/") {
+			waitValidateFunc = waitValidateV1PipelineRunDone
+		}
 		kind := "pipelinerun"
 
 		if strings.Contains(path, "/taskruns/") {
 			waitValidateFunc = waitValidateTaskRunDone
+			if strings.Contains(path, "/v1/") {
+				waitValidateFunc = waitValidateV1TaskRunDone
+			}
 			kind = "taskrun"
 		}
 
