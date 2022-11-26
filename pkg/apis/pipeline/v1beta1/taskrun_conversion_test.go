@@ -30,6 +30,7 @@ import (
 	corev1resources "k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"knative.dev/pkg/apis"
+	duckv1beta1 "knative.dev/pkg/apis/duck/v1beta1"
 )
 
 const (
@@ -168,6 +169,63 @@ func TestTaskrunConversion(t *testing.T) {
 						corev1.ResourceMemory: corev1resources.MustParse("1Gi"),
 					},
 				},
+			},
+			Status: v1beta1.TaskRunStatus{
+				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+					PodName:        "pod-name",
+					StartTime:      &metav1.Time{Time: time.Now()},
+					CompletionTime: &metav1.Time{Time: time.Now().Add(1 * time.Minute)},
+					Steps: []v1beta1.StepState{{
+						ContainerState: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{
+								ExitCode: 123,
+							}},
+
+						Name:          "failure",
+						ContainerName: "step-failure",
+						ImageID:       "image-id",
+					}},
+					Sidecars: []v1beta1.SidecarState{{
+						ContainerState: corev1.ContainerState{
+							Terminated: &corev1.ContainerStateTerminated{
+								ExitCode: 123,
+							}},
+
+						Name:          "failure",
+						ContainerName: "step-failure",
+						ImageID:       "image-id",
+					}},
+					RetriesStatus: []v1beta1.TaskRunStatus{{
+						Status: duckv1beta1.Status{
+							Conditions: []apis.Condition{{
+								Type:   apis.ConditionSucceeded,
+								Status: corev1.ConditionFalse,
+							}},
+						},
+					}},
+					TaskRunResults: []v1beta1.TaskRunResult{{
+						Name:  "resultName",
+						Type:  v1beta1.ResultsTypeObject,
+						Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+					}},
+					TaskSpec: &v1beta1.TaskSpec{
+						Description: "test",
+						Steps: []v1beta1.Step{{
+							Image: "foo",
+						}},
+						Volumes: []corev1.Volume{{}},
+						Params: []v1beta1.ParamSpec{{
+							Name:        "param-1",
+							Type:        v1beta1.ParamTypeString,
+							Description: "My first param",
+						}},
+					},
+					Provenance: &v1beta1.Provenance{
+						ConfigSource: &v1beta1.ConfigSource{
+							URI:    "test-uri",
+							Digest: map[string]string{"sha256": "digest"},
+						},
+					}},
 			},
 		},
 	}}
