@@ -565,7 +565,7 @@ type PipelineTaskRunSpec struct {
 	SidecarOverrides []TaskRunSidecarOverride `json:"sidecarOverrides,omitempty"`
 
 	// +optional
-	Metadata *PipelineTaskMetadata `json:"metadata,omitempty"`
+	Metadata PipelineTaskMetadata `json:"metadata,omitempty"`
 
 	// Compute resources to use for this TaskRun
 	ComputeResources *corev1.ResourceRequirements `json:"computeResources,omitempty"`

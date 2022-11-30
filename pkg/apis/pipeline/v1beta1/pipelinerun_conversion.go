@@ -177,10 +177,11 @@ func (ptrs PipelineTaskRunSpec) convertTo(ctx context.Context, sink *v1.Pipeline
 		so.convertTo(ctx, &new)
 		sink.SidecarSpecs = append(sink.SidecarSpecs, new)
 	}
-	if ptrs.Metadata != nil {
-		sink.Metadata = &v1.PipelineTaskMetadata{}
-		ptrs.Metadata.convertTo(ctx, sink.Metadata)
-	}
+	// Omit conversions here as the purpose is for testing upgrade test
+	// if ptrs.Metadata != nil {
+	// 	sink.Metadata = &v1.PipelineTaskMetadata{}
+	// 	ptrs.Metadata.convertTo(ctx, sink.Metadata)
+	// }
 	sink.ComputeResources = ptrs.ComputeResources
 }
 
@@ -200,11 +201,12 @@ func (ptrs *PipelineTaskRunSpec) convertFrom(ctx context.Context, source v1.Pipe
 		new.convertFrom(ctx, so)
 		ptrs.SidecarOverrides = append(ptrs.SidecarOverrides, new)
 	}
-	if source.Metadata != nil {
-		newMetadata := PipelineTaskMetadata{}
-		newMetadata.convertFrom(ctx, *source.Metadata)
-		ptrs.Metadata = &newMetadata
-	}
+	// Omit conversions here as the purpose is for testing upgrade test
+	// if source.Metadata != nil {
+	// 	newMetadata := PipelineTaskMetadata{}
+	// 	newMetadata.convertFrom(ctx, *source.Metadata)
+	// 	ptrs.Metadata = &newMetadata
+	// }
 	ptrs.ComputeResources = source.ComputeResources
 }
 
