@@ -46,44 +46,9 @@ set +o pipefail
 header "Install the previous release of Tekton pipeline $PREVIOUS_PIPELINE_VERSION"
 install_pipeline_crd_version $PREVIOUS_PIPELINE_VERSION
 
-# Upgrade to the current release.
-header "Upgrade to the current release of Tekton pipeline"
-install_pipeline_crd
-
-# Run the integration tests.
 failed=0
+# The integration test for the older version to prevent regression on existing changes.
 go_test_e2e -timeout=20m ./test || failed=1
-
-# Run the post-integration tests.
-go_test_e2e -tags=examples -timeout=20m ./test/ || failed=1
-
-# Remove all the pipeline CRDs, and clean up the environment for next Scenario.
-uninstall_pipeline_crd
-uninstall_pipeline_crd_version $PREVIOUS_PIPELINE_VERSION
-
-# Next, we will verify if Scenario 2 works.
-# Install the previous release.
-header "Install the previous release of Tekton pipeline $PREVIOUS_PIPELINE_VERSION"
-install_pipeline_crd_version $PREVIOUS_PIPELINE_VERSION
-
-# Create the resources of taskrun and pipelinerun, under the directories example/taskrun
-# and example/pipelinerun.
-for test in taskrun pipelinerun; do
-  header "Applying the resources ${test}s"
-  apply_resources ${test}
-done
-
-# Upgrade to the current release.
-header "Upgrade to the current release of Tekton pipeline"
-install_pipeline_crd
-
-# Run the integration tests.
-go_test_e2e -timeout=20m ./test || failed=1
-
-# Run the post-integration tests. We do not need to install the resources again, since
-# they are installed before the upgrade. We verify if they still work, after going through
-# the upgrade.
-go_test_e2e -tags=examples -timeout=20m ./test/ || failed=1
 
 (( failed )) && fail_test
 
