@@ -126,14 +126,15 @@ func TestPipelineRunConversion(t *testing.T) {
 								Requests: corev1.ResourceList{corev1.ResourceMemory: corev1resources.MustParse("1Gi")},
 							}},
 						},
-						Metadata: &v1beta1.PipelineTaskMetadata{
-							Labels: map[string]string{
-								"foo": "bar",
-							},
-							Annotations: map[string]string{
-								"foo": "bar",
-							},
-						},
+						// Omit conversions here as the purpose is for testing upgrade test
+						// Metadata: &v1beta1.PipelineTaskMetadata{
+						// 	Labels: map[string]string{
+						// 		"foo": "bar",
+						// 	},
+						// 	Annotations: map[string]string{
+						// 		"foo": "bar",
+						// 	},
+						// },
 						ComputeResources: &corev1.ResourceRequirements{
 							Requests: corev1.ResourceList{
 								corev1.ResourceCPU:    resource.MustParse("2"),
