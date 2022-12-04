@@ -55,9 +55,52 @@ var (
 		PipelineTaskName: "ptn",
 		Status: &v1beta1.TaskRunStatus{
 			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				PodName:        "pod-name",
-				StartTime:      &metav1.Time{Time: time.Now()},
-				CompletionTime: &metav1.Time{Time: time.Now().Add(1 * time.Minute)},
+				PodName: "pod-name",
+				RetriesStatus: []v1beta1.TaskRunStatus{{
+					Status: duckv1.Status{
+						Conditions: []apis.Condition{{
+							Type:   apis.ConditionSucceeded,
+							Status: corev1.ConditionFalse,
+						}},
+					},
+				}},
+				Steps: []v1beta1.StepState{{
+					ContainerState: corev1.ContainerState{
+						Running: &corev1.ContainerStateRunning{},
+					},
+					Name:          "running-step",
+					ContainerName: "step-running-step",
+				}},
+				CloudEvents: []v1beta1.CloudEventDelivery{
+					{
+						Target: "http//sink1",
+						Status: v1beta1.CloudEventDeliveryState{
+							Condition: v1beta1.CloudEventConditionUnknown,
+						},
+					},
+					{
+						Target: "http//sink2",
+						Status: v1beta1.CloudEventDeliveryState{
+							Condition: v1beta1.CloudEventConditionUnknown,
+						},
+					},
+				},
+				Sidecars: []v1beta1.SidecarState{{ContainerState: corev1.ContainerState{
+					Terminated: &corev1.ContainerStateTerminated{
+						ExitCode: 1,
+						Reason:   "Error",
+						Message:  "Error",
+					},
+				},
+					Name:          "error",
+					ImageID:       "image-id",
+					ContainerName: "sidecar-error",
+				}},
+				ResourcesResult: []v1beta1.PipelineResourceResult{{
+					Key:          "digest",
+					Value:        "sha256:1234",
+					ResourceName: "source-image",
+				}},
 			},
 		},
 		WhenExpressions: v1beta1.WhenExpressions{{
@@ -70,7 +113,10 @@ var (
 		PipelineTaskName: "ptn-0",
 		Status: &runv1alpha1.RunStatus{
 			RunStatusFields: runv1alpha1.RunStatusFields{
-				StartTime: &metav1.Time{Time: now},
+				Results: []runv1alpha1.RunResult{{
+					Name:  "foo",
+					Value: "bar",
+				}},
 			},
 		},
 		WhenExpressions: v1beta1.WhenExpressions{{
@@ -79,6 +125,8 @@ var (
 			Values:   []string{"val-0", "val-1"},
 		}},
 	}
+	taskRuns = make(map[string]*v1beta1.PipelineRunTaskRunStatus)
+	runs     = make(map[string]*v1beta1.PipelineRunRunStatus)
 )
 
 func TestPipelineRunConversionBadType(t *testing.T) {
@@ -409,9 +457,8 @@ func TestPipelineRunConversionFromDeprecated(t *testing.T) {
 	}
 }
 
-func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
-	taskRuns := make(map[string]*v1beta1.PipelineRunTaskRunStatus)
-	runs := make(map[string]*v1beta1.PipelineRunRunStatus)
+// Assumptions: Full embedded status
+func TestPipelineRunConversionEmbeddedStatusRoundTrip(t *testing.T) {
 	taskRuns["tr-0"] = trs
 	runs["r-0"] = rrs
 
@@ -450,6 +497,7 @@ func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
 			Status: v1beta1.PipelineRunStatus{
 				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
 					ChildReferences: childRefTaskRuns,
+					TaskRuns:        taskRuns,
 				},
 			},
 		},
@@ -467,8 +515,7 @@ func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
 			},
 			Status: v1beta1.PipelineRunStatus{
 				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-					Runs:     runs,
-					TaskRuns: taskRuns,
+					Runs: runs,
 				},
 			},
 		},
@@ -484,12 +531,13 @@ func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
 			},
 			Status: v1beta1.PipelineRunStatus{
 				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-					ChildReferences: append(childRefTaskRuns, childRefRuns...),
+					ChildReferences: childRefRuns,
+					Runs:            runs,
 				},
 			},
 		},
 	}, {
-		name: "runs and childReference",
+		name: "runs, taskRuns and childReferences",
 		in: &v1beta1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "foo",
@@ -502,6 +550,7 @@ func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
 			},
 			Status: v1beta1.PipelineRunStatus{
 				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
+					TaskRuns:        taskRuns,
 					Runs:            runs,
 					ChildReferences: childRefRuns,
 				},
@@ -520,47 +569,12 @@ func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
 			Status: v1beta1.PipelineRunStatus{
 				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
 					ChildReferences: childRefRuns,
+					TaskRuns:        taskRuns,
+					Runs:            runs,
 				},
 			},
 		},
-	},
-		{
-			name: "taskruns, runs and childReference",
-			in: &v1beta1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "foo",
-					Namespace: "bar",
-				},
-				Spec: v1beta1.PipelineRunSpec{
-					PipelineRef: &v1beta1.PipelineRef{
-						Name: "test-runs",
-					},
-				},
-				Status: v1beta1.PipelineRunStatus{
-					PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-						Runs:            runs,
-						TaskRuns:        taskRuns,
-						ChildReferences: append(childRefRuns, childRefTaskRuns...),
-					},
-				},
-			},
-			want: &v1beta1.PipelineRun{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "foo",
-					Namespace: "bar",
-				},
-				Spec: v1beta1.PipelineRunSpec{
-					PipelineRef: &v1beta1.PipelineRef{
-						Name: "test-runs",
-					},
-				},
-				Status: v1beta1.PipelineRunStatus{
-					PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-						ChildReferences: append(childRefRuns, childRefTaskRuns...),
-					},
-				},
-			},
-		}}
+	}}
 	for _, test := range tests {
 		versions := []apis.Convertible{&v1.PipelineRun{}}
 		for _, version := range versions {
@@ -586,18 +600,41 @@ func TestPipelineRunConversionMinimalEmbeddedStatus(t *testing.T) {
 	}
 }
 
-func TestPipelineRunConversionEmbeddedStatusError(t *testing.T) {
+func TestPipelineRunConversionEmbeddedStatusConvertTo(t *testing.T) {
+	taskRuns["tr-0"] = trs
+	runs["r-0"] = rrs
 	tests := []struct {
-		name           string
-		in             *v1.PipelineRun
-		embeddedStatus string
-		wantErr        bool
+		name string
+		in   *v1beta1.PipelineRun
+		want *v1.PipelineRun
 	}{{
-		name: "v1 to v1beta1 with full embedded status invalid",
-		in: &v1.PipelineRun{
+		name: "v1beta1 to v1",
+		in: &v1beta1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:      "foo",
 				Namespace: "bar",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1beta1.PipelineRunStatus{
+				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
+					ChildReferences: append(childRefTaskRuns, childRefRuns...),
+					TaskRuns:        taskRuns,
+					Runs:            runs,
+				},
+			},
+		},
+		want: &v1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+				Annotations: map[string]string{
+					"tekton.dev/v1beta1Runs":     `{"r-0":{"pipelineTaskName":"ptn-0","status":{"results":[{"name":"foo","value":"bar"}],"extraFields":null},"whenExpressions":[{"input":"default-value-0","operator":"in","values":["val-0","val-1"]}]}}`,
+					"tekton.dev/v1beta1TaskRuns": `{"tr-0":{"pipelineTaskName":"ptn","status":{"podName":"pod-name","steps":[{"running":{"startedAt":null},"name":"running-step","container":"step-running-step"}],"cloudEvents":[{"target":"http//sink1","status":{"condition":"Unknown","message":"","retryCount":0}},{"target":"http//sink2","status":{"condition":"Unknown","message":"","retryCount":0}}],"retriesStatus":[{"conditions":[{"type":"Succeeded","status":"False","lastTransitionTime":null}],"podName":""}],"resourcesResult":[{"key":"digest","value":"sha256:1234","resourceName":"source-image"}],"sidecars":[{"terminated":{"exitCode":1,"reason":"Error","message":"Error","startedAt":null,"finishedAt":null},"name":"error","container":"sidecar-error","imageID":"image-id"}]},"whenExpressions":[{"input":"default-value","operator":"in","values":["val"]}]}}`,
+				},
 			},
 			Spec: v1.PipelineRunSpec{
 				PipelineRef: &v1.PipelineRef{
@@ -611,51 +648,97 @@ func TestPipelineRunConversionEmbeddedStatusError(t *testing.T) {
 						Name:             "tr-0",
 						PipelineTaskName: "ptn",
 						WhenExpressions:  []v1.WhenExpression{{Input: "default-value", Operator: "in", Values: []string{"val"}}},
+					}, {TypeMeta: runtime.TypeMeta{Kind: "Run", APIVersion: "v1alpha1"},
+						Name:             "r-0",
+						PipelineTaskName: "ptn-0",
+						WhenExpressions:  []v1.WhenExpression{{Input: "default-value-0", Operator: "in", Values: []string{"val-0", "val-1"}}},
 					}},
 				},
 			},
 		},
-		embeddedStatus: config.FullEmbeddedStatus,
-		wantErr:        true,
-	}, {
-		name: "v1 to v1beta1 status with both embedded status invalid",
-		in: &v1.PipelineRun{
-			ObjectMeta: metav1.ObjectMeta{
-				Name:      "foo",
-				Namespace: "bar",
-			},
-			Spec: v1.PipelineRunSpec{
-				PipelineRef: &v1.PipelineRef{
-					Name: "test",
-				},
-			},
-			Status: v1.PipelineRunStatus{
-				PipelineRunStatusFields: v1.PipelineRunStatusFields{
-					ChildReferences: []v1.ChildStatusReference{{
-						TypeMeta:         runtime.TypeMeta{Kind: "TaskRun", APIVersion: "v1beta1"},
-						Name:             "tr-0",
-						PipelineTaskName: "ptn",
-						WhenExpressions:  []v1.WhenExpression{{Input: "default-value", Operator: "in", Values: []string{"val"}}},
-					}},
-				},
-			},
-		},
-		embeddedStatus: config.BothEmbeddedStatus,
-		wantErr:        true,
 	}}
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
-			featureFlags, _ := config.NewFeatureFlagsFromMap(map[string]string{
-				"embedded-status": test.embeddedStatus,
-			})
-			cfg := &config.Config{FeatureFlags: featureFlags}
-			ctx := config.ToContext(context.Background(), cfg)
+			v1PipelineRun := &v1.PipelineRun{}
 
+			if err := test.in.ConvertTo(context.Background(), v1PipelineRun); err != nil {
+				t.Errorf("ConvertTo() = %v", err)
+			}
+			t.Logf("ConvertTo() = %#v", v1PipelineRun)
+			if d := cmp.Diff(test.want, v1PipelineRun); d != "" {
+				t.Errorf("v1beta1 ConvertTo v1 %s", diff.PrintWantGot(d))
+			}
+		})
+	}
+}
+
+func TestPipelineRunConversionEmbeddedStatusConvertFrom(t *testing.T) {
+	taskRuns["tr-0"] = trs
+	runs["r-0"] = rrs
+	tests := []struct {
+		name string
+		in   *v1.PipelineRun
+		want *v1beta1.PipelineRun
+	}{{
+		name: "v1 to v1beta1",
+		in: &v1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+				Annotations: map[string]string{
+					"tekton.dev/v1beta1Runs":     `{"r-0":{"pipelineTaskName":"ptn-0","status":{"results":[{"name":"foo","value":"bar"}],"extraFields":null},"whenExpressions":[{"input":"default-value-0","operator":"in","values":["val-0","val-1"]}]}}`,
+					"tekton.dev/v1beta1TaskRuns": `{"tr-0":{"pipelineTaskName":"ptn","status":{"podName":"pod-name","steps":[{"running":{"startedAt":null},"name":"running-step","container":"step-running-step"}],"cloudEvents":[{"target":"http//sink1","status":{"condition":"Unknown","message":"","retryCount":0}},{"target":"http//sink2","status":{"condition":"Unknown","message":"","retryCount":0}}],"retriesStatus":[{"conditions":[{"type":"Succeeded","status":"False","lastTransitionTime":null}],"podName":""}],"resourcesResult":[{"key":"digest","value":"sha256:1234","resourceName":"source-image"}],"sidecars":[{"terminated":{"exitCode":1,"reason":"Error","message":"Error","startedAt":null,"finishedAt":null},"name":"error","container":"sidecar-error","imageID":"image-id"}]},"whenExpressions":[{"input":"default-value","operator":"in","values":["val"]}]}}`,
+				},
+			},
+			Spec: v1.PipelineRunSpec{
+				PipelineRef: &v1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1.PipelineRunStatus{
+				PipelineRunStatusFields: v1.PipelineRunStatusFields{
+					ChildReferences: []v1.ChildStatusReference{{
+						TypeMeta:         runtime.TypeMeta{Kind: "TaskRun", APIVersion: "v1beta1"},
+						Name:             "tr-0",
+						PipelineTaskName: "ptn",
+						WhenExpressions:  []v1.WhenExpression{{Input: "default-value", Operator: "in", Values: []string{"val"}}},
+					}, {TypeMeta: runtime.TypeMeta{Kind: "Run", APIVersion: "v1alpha1"},
+						Name:             "r-0",
+						PipelineTaskName: "ptn-0",
+						WhenExpressions:  []v1.WhenExpression{{Input: "default-value-0", Operator: "in", Values: []string{"val-0", "val-1"}}},
+					}},
+				},
+			},
+		},
+		want: &v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1beta1.PipelineRunStatus{
+				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
+					ChildReferences: append(childRefTaskRuns, childRefRuns...),
+					TaskRuns:        taskRuns,
+					Runs:            runs,
+				},
+			},
+		},
+	}}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
 			v1beta1PipelineRun := &v1beta1.PipelineRun{}
 
-			err := v1beta1PipelineRun.ConvertFrom(ctx, test.in)
-			if err == nil && test.wantErr {
-				t.Errorf("expected error but received nil")
+			if err := v1beta1PipelineRun.ConvertFrom(context.Background(), test.in); err != nil {
+				t.Errorf("ConvertFrom() = %v", err)
+			}
+			t.Logf("ConvertFrom() = %#v", v1beta1PipelineRun)
+			if d := cmp.Diff(test.want, v1beta1PipelineRun); d != "" {
+				t.Errorf("v1beta1 ConvertFrom v1 %s", diff.PrintWantGot(d))
 			}
 		})
 	}
