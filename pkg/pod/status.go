@@ -147,7 +147,7 @@ func MakeTaskRunStatus(ctx context.Context, logger *zap.SugaredLogger, tr v1.Tas
 
 	setTaskRunStatusBasedOnSidecarStatus(sidecarStatuses, trs)
 
-	trs.Results = removeDuplicateResults(trs.Results)
+	trs.TaskRunResults = removeDuplicateResults(trs.TaskRunResults)
 
 	return *trs, merr.ErrorOrNil()
 }
@@ -177,7 +177,7 @@ func setTaskRunStatusBasedOnStepStatus(ctx context.Context, logger *zap.SugaredL
 		// populate task run CRD with results from sidecar logs
 		taskResults, pipelineResourceResults, _ := filterResultsAndResources(sidecarLogResults, specResults)
 		if tr.IsSuccessful() {
-			trs.Results = append(trs.Results, taskResults...)
+			trs.TaskRunResults = append(trs.TaskRunResults, taskResults...)
 			trs.ResourcesResult = append(trs.ResourcesResult, pipelineResourceResults...)
 		}
 	}
@@ -204,7 +204,7 @@ func setTaskRunStatusBasedOnStepStatus(ctx context.Context, logger *zap.SugaredL
 
 				taskResults, pipelineResourceResults, filteredResults := filterResultsAndResources(results, specResults)
 				if tr.IsSuccessful() {
-					trs.Results = append(trs.Results, taskResults...)
+					trs.TaskRunResults = append(trs.TaskRunResults, taskResults...)
 					trs.ResourcesResult = append(trs.ResourcesResult, pipelineResourceResults...)
 				}
 				msg, err = createMessageFromResults(filteredResults)
@@ -265,17 +265,10 @@ func filterResultsAndResources(results []v1.PipelineResourceResult, specResults 
 	}
 	for _, r := range results {
 		switch r.ResultType {
-<<<<<<< Updated upstream
-		case v1beta1.TaskRunResultType:
-			var taskRunResult v1beta1.TaskRunResult
-			if neededTypes[r.Key] == v1beta1.ResultsTypeString {
-				taskRunResult = v1beta1.TaskRunResult{
-=======
 		case v1.TaskRunResultType:
 			taskRunResult := v1.TaskRunResult{}
 			if neededTypes[r.Key] == v1.ResultsTypeString {
 				taskRunResult = v1.TaskRunResult{
->>>>>>> Stashed changes
 					Name:  r.Key,
 					Type:  v1.ResultsTypeString,
 					Value: *v1.NewStructuredValues(r.Value),
@@ -297,11 +290,8 @@ func filterResultsAndResources(results []v1.PipelineResourceResult, specResults 
 		case v1.InternalTektonResultType:
 			// Internal messages are ignored because they're not used as external result
 			continue
-<<<<<<< Updated upstream
-=======
 		case v1.PipelineResourceResultType:
 			fallthrough
->>>>>>> Stashed changes
 		default:
 			pipelineResourceResults = append(pipelineResourceResults, r)
 			filteredResults = append(filteredResults, r)

@@ -29,7 +29,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-containerregistry/pkg/registry"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/client/clientset/versioned/fake"
 	"github.com/tektoncd/pipeline/pkg/reconciler/pipelinerun/resources"
 	"github.com/tektoncd/pipeline/pkg/trustedresources"
@@ -37,6 +37,7 @@ import (
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/parse"
 	corev1 "k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	fakek8s "k8s.io/client-go/kubernetes/fake"
@@ -202,10 +203,8 @@ func TestGetPipelineFunc(t *testing.T) {
 			fn := resources.GetPipelineFunc(ctx, kubeclient, tektonclient, nil, &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
 				Spec: v1.PipelineRunSpec{
-					PipelineRef: tc.ref,
-					TaskRunTemplate: v1.PipelineTaskRunTemplate{
-						ServiceAccountName: "default",
-					},
+					PipelineRef:        tc.ref,
+					ServiceAccountName: "default",
 				},
 			})
 			if err != nil {
@@ -291,7 +290,6 @@ func TestGetPipelineFunc_RemoteResolution(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
-<<<<<<< Updated upstream
 	pipeline := parse.MustParseV1beta1Pipeline(t, pipelineYAMLString)
 	pipelineRef := &v1beta1.PipelineRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}}
 
@@ -324,25 +322,6 @@ func TestGetPipelineFunc_RemoteResolution(t *testing.T) {
 					ServiceAccountName: "default",
 				},
 			})
-=======
-	pipeline := parse.MustParseV1Pipeline(t, pipelineYAMLString)
-	pipelineRef := &v1.PipelineRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
-	pipelineYAML := strings.Join([]string{
-		"kind: Pipeline",
-		"apiVersion: tekton.dev/v1",
-		pipelineYAMLString,
-	}, "\n")
-
-	resolved := test.NewResolvedResource([]byte(pipelineYAML), nil, sampleConfigSource.DeepCopy(), nil)
-	requester := test.NewRequester(resolved, nil)
-	fn := resources.GetPipelineFunc(ctx, nil, nil, requester, &v1.PipelineRun{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-		Spec: v1.PipelineRunSpec{
-			PipelineRef:        pipelineRef,
-			ServiceAccountName: "default",
-		},
-	})
->>>>>>> Stashed changes
 
 			resolvedPipeline, resolvedConfigSource, err := fn(ctx, pipelineRef.Name)
 			if err != nil {
@@ -364,11 +343,11 @@ func TestGetPipelineFunc_RemoteResolution_ReplacedParams(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
-	pipeline := parse.MustParseV1Pipeline(t, pipelineYAMLString)
+	pipeline := parse.MustParsev1Pipeline(t, pipelineYAMLString)
 	pipelineRef := &v1.PipelineRef{
 		ResolverRef: v1.ResolverRef{
 			Resolver: "git",
-			Params: []v1.ParamV{{
+			Params: []v1.Param{{
 				Name:  "foo",
 				Value: *v1.NewStructuredValues("$(params.resolver-param)"),
 			}, {
@@ -524,16 +503,16 @@ func TestGetVerifiedPipelineFunc_Success(t *testing.T) {
 	pr := v1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 		Spec: v1.PipelineRunSpec{
-			PipelineRef:     pipelineRef,
-			TaskRunTemplate: v1.PipelineTaskRunTemplate{ServiceAccountName: "default"},
+			PipelineRef:        pipelineRef,
+			ServiceAccountName: "default",
 		},
 	}
 
 	prWithStatus := v1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 		Spec: v1.PipelineRunSpec{
-			PipelineRef:     pipelineRef,
-			TaskRunTemplate: v1.PipelineTaskRunTemplate{ServiceAccountName: "default"},
+			PipelineRef:        pipelineRef,
+			ServiceAccountName: "default",
 		},
 		Status: v1.PipelineRunStatus{
 			PipelineRunStatusFields: v1.PipelineRunStatusFields{
@@ -687,8 +666,8 @@ func TestGetVerifiedPipelineFunc_VerifyError(t *testing.T) {
 			pr := &v1.PipelineRun{
 				ObjectMeta: metav1.ObjectMeta{Namespace: "trusted-resources"},
 				Spec: v1.PipelineRunSpec{
-					PipelineRef:     pipelineRef,
-					TaskRunTemplate: v1.PipelineTaskRunTemplate{ServiceAccountName: "default"},
+					PipelineRef:        pipelineRef,
+					ServiceAccountName: "default",
 				},
 			}
 			fn := resources.GetVerifiedPipelineFunc(ctx, k8sclient, tektonclient, tc.requester, pr, vps)
@@ -729,7 +708,7 @@ func TestGetVerifiedPipelineFunc_GetFuncError(t *testing.T) {
 				Name:   "pipelineName",
 				Bundle: "bundle",
 			},
-			TaskRunTemplate: v1.PipelineTaskRunTemplate{ServiceAccountName: "default"},
+			ServiceAccountName: "default",
 		},
 	}
 
@@ -742,7 +721,7 @@ func TestGetVerifiedPipelineFunc_GetFuncError(t *testing.T) {
 					Resolver: "git",
 				},
 			},
-			TaskRunTemplate: v1.PipelineTaskRunTemplate{ServiceAccountName: "default"},
+			ServiceAccountName: "default",
 		},
 	}
 

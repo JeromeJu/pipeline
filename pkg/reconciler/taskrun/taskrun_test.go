@@ -4978,7 +4978,6 @@ status:
 	}{
 		{
 			name:          "unsigned task fails verification",
-<<<<<<< Updated upstream
 			task:          []*v1beta1.Task{ts},
 			expectedError: trustedresources.ErrResourceVerificationFailed,
 		},
@@ -4986,15 +4985,6 @@ status:
 			name:          "modified task fails verification",
 			task:          []*v1beta1.Task{tamperedTask},
 			expectedError: trustedresources.ErrResourceVerificationFailed,
-=======
-			task:          []*v1.Task{ts},
-			expectedError: trustedresources.ErrorResourceVerificationFailed,
-		},
-		{
-			name:          "modified task fails verification",
-			task:          []*v1.Task{tamperedTask},
-			expectedError: trustedresources.ErrorResourceVerificationFailed,
->>>>>>> Stashed changes
 		},
 	}
 

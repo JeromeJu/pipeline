@@ -24,13 +24,8 @@ import (
 	"strings"
 	"time"
 
-<<<<<<< Updated upstream
-=======
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
->>>>>>> Stashed changes
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"go.uber.org/zap"
 	jsonpatch "gomodules.xyz/jsonpatch/v2"
@@ -64,12 +59,12 @@ func init() {
 		{
 			Operation: "add",
 			Path:      "/spec/status",
-			Value:     v1beta1.CustomRunSpecStatusCancelled,
+			Value:     v1.CustomRunSpecStatusCancelled,
 		},
 		{
 			Operation: "add",
 			Path:      "/spec/statusMessage",
-			Value:     v1beta1.CustomRunCancelledByPipelineMsg,
+			Value:     v1.CustomRunCancelledByPipelineMsg,
 		}})
 	if err != nil {
 		log.Fatalf("failed to marshal CustomRun cancel patch bytes: %v", err)
@@ -91,7 +86,7 @@ func init() {
 }
 
 func cancelCustomRun(ctx context.Context, runName string, namespace string, clientSet clientset.Interface) error {
-	_, err := clientSet.TektonV1beta1().CustomRuns(namespace).Patch(ctx, runName, types.JSONPatchType, cancelCustomRunPatchBytes, metav1.PatchOptions{}, "")
+	_, err := clientSet.Tektonv1().CustomRuns(namespace).Patch(ctx, runName, types.JSONPatchType, cancelCustomRunPatchBytes, metav1.PatchOptions{}, "")
 	if errors.IsNotFound(err) {
 		// The resource may have been deleted in the meanwhile, but we should
 		// still be able to cancel the PipelineRun
@@ -111,7 +106,7 @@ func cancelRun(ctx context.Context, runName string, namespace string, clientSet 
 }
 
 func cancelTaskRun(ctx context.Context, taskRunName string, namespace string, clientSet clientset.Interface) error {
-	_, err := clientSet.TektonV1beta1().TaskRuns(namespace).Patch(ctx, taskRunName, types.JSONPatchType, cancelTaskRunPatchBytes, metav1.PatchOptions{}, "")
+	_, err := clientSet.Tektonv1().TaskRuns(namespace).Patch(ctx, taskRunName, types.JSONPatchType, cancelTaskRunPatchBytes, metav1.PatchOptions{}, "")
 	if errors.IsNotFound(err) {
 		// The resource may have been deleted in the meanwhile, but we should
 		// still be able to cancel the PipelineRun

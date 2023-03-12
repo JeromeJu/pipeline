@@ -72,7 +72,7 @@ func GetPipelineFunc(ctx context.Context, k8s kubernetes.Interface, tekton clien
 			// If there is a bundle url at all, construct an OCI resolver to fetch the pipeline.
 			kc, err := k8schain.New(ctx, k8s, k8schain.Options{
 				Namespace:          namespace,
-				ServiceAccountName: pipelineRun.Spec.TaskRunTemplate.ServiceAccountName,
+				ServiceAccountName: pipelineRun.Spec.ServiceAccountName,
 			})
 			if err != nil {
 				return nil, nil, fmt.Errorf("failed to get keychain: %w", err)
@@ -148,7 +148,7 @@ func (l *LocalPipelineRefResolver) GetPipeline(ctx context.Context, name string)
 		return nil, nil, fmt.Errorf("Must specify namespace to resolve reference to pipeline %s", name)
 	}
 
-	pipeline, err := l.Tektonclient.TektonV1().Pipelines(l.Namespace).Get(ctx, name, metav1.GetOptions{})
+	pipeline, err := l.Tektonclient.Tektonv1().Pipelines(l.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, err
 	}
@@ -159,7 +159,7 @@ func (l *LocalPipelineRefResolver) GetPipeline(ctx context.Context, name string)
 // fetch a pipeline with given name. An error is returned if the
 // resolution doesn't work or the returned data isn't a valid
 // v1.PipelineObject.
-func resolvePipeline(ctx context.Context, resolver remote.Resolver, name string) (v1.PipelineObject, *v1beta1.ConfigSource, error) {
+func resolvePipeline(ctx context.Context, resolver remote.Resolver, name string) (v1.PipelineObject, *v1.ConfigSource, error) {
 	obj, configSource, err := resolver.Get(ctx, "pipeline", name)
 	if err != nil {
 		return nil, nil, err
@@ -172,7 +172,6 @@ func resolvePipeline(ctx context.Context, resolver remote.Resolver, name string)
 }
 
 // readRuntimeObjectAsPipeline tries to convert a generic runtime.Object
-<<<<<<< Updated upstream
 // into a v1beta1.PipelineObject type so that its meta and spec fields
 // can be read. v1 object will be converted to v1beta1 and returned.
 // An error is returned if the given object is not a
@@ -194,15 +193,6 @@ func readRuntimeObjectAsPipeline(ctx context.Context, obj runtime.Object) (v1bet
 			return nil, err
 		}
 		return t, nil
-=======
-// into a v1.PipelineObject type so that its meta and spec fields
-// can be read. An error is returned if the given object is not a
-// PipelineObject or if there is an error validating or upgrading an
-// older PipelineObject into its v1 equivalent.
-func readRuntimeObjectAsPipeline(ctx context.Context, obj runtime.Object) (v1.PipelineObject, error) {
-	if pipeline, ok := obj.(v1.PipelineObject); ok {
-		return pipeline, nil
->>>>>>> Stashed changes
 	}
 
 	return nil, errors.New("resource is not a pipeline")

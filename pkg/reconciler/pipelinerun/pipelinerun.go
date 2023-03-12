@@ -30,8 +30,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	runv1beta1 "github.com/tektoncd/pipeline/pkg/apis/run/v1beta1"
+	runv1 "github.com/tektoncd/pipeline/pkg/apis/run/v1"
 	clientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	pipelinerunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/pipelinerun"
 	listers "github.com/tektoncd/pipeline/pkg/client/listers/pipeline/v1"
@@ -317,13 +316,13 @@ func (c *Reconciler) resolvePipelineState(
 
 		fn := tresources.GetVerifiedTaskFunc(ctx, c.KubeClientSet, c.PipelineClientSet, c.resolutionRequester, pr, task.TaskRef, trName, pr.Namespace, pr.Spec.ServiceAccountName, vp)
 
-		getRunObjectFunc := func(name string) (v1beta1.RunObject, error) {
+		getRunObjectFunc := func(name string) (v1.RunObject, error) {
 			r, err := c.customRunLister.CustomRuns(pr.Namespace).Get(name)
 			if err != nil {
 				return nil, err
 			}
 			// If we just return c.customRunLister.CustomRuns(...).Get(...) and there is no run, we end up returning
-			// a v1beta1.RunObject that won't == nil, so do an explicit check.
+			// a v1.RunObject that won't == nil, so do an explicit check.
 			if r == nil {
 				return nil, nil
 			}
@@ -332,13 +331,13 @@ func (c *Reconciler) resolvePipelineState(
 
 		cfg := config.FromContextOrDefaults(ctx)
 		if cfg.FeatureFlags.CustomTaskVersion == config.CustomTaskVersionAlpha {
-			getRunObjectFunc = func(name string) (v1beta1.RunObject, error) {
+			getRunObjectFunc = func(name string) (v1.RunObject, error) {
 				r, err := c.runLister.Runs(pr.Namespace).Get(name)
 				if err != nil {
 					return nil, err
 				}
 				// If we just return c.runLister.Runs(...).Get(...) and there is no run, we end up returning
-				// a v1beta1.RunObject that won't == nil, so do an explicit check.
+				// a v1.RunObject that won't == nil, so do an explicit check.
 				if r == nil {
 					return nil, nil
 				}
@@ -687,7 +686,7 @@ func (c *Reconciler) reconcile(ctx context.Context, pr *v1.PipelineRun, getPipel
 
 	pr.Status.SkippedTasks = pipelineRunFacts.GetSkippedTasks()
 	if after.Status == corev1.ConditionTrue || after.Status == corev1.ConditionFalse {
-		pr.Status.Results, err = resources.ApplyTaskResultsToPipelineResults(pipelineSpec.Results,
+		pr.Status.PipelineResults, err = resources.ApplyTaskResultsToPipelineResults(pipelineSpec.Results,
 			pipelineRunFacts.State.GetTaskRunsResults(), pipelineRunFacts.State.GetRunsResults())
 		if err != nil {
 			pr.Status.MarkFailed(ReasonFailedValidation, err.Error())
@@ -798,13 +797,8 @@ func (c *Reconciler) setFinallyStartedTimeIfNeeded(pr *v1.PipelineRun, facts *re
 func (c *Reconciler) createTaskRuns(ctx context.Context, rpt *resources.ResolvedPipelineTask, pr *v1.PipelineRun) ([]*v1.TaskRun, error) {
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "createTaskRuns")
 	defer span.End()
-<<<<<<< Updated upstream
-	var taskRuns []*v1beta1.TaskRun
-	matrixCombinations := rpt.PipelineTask.Matrix.FanOut().ToParams()
-=======
 	var taskRuns []*v1.TaskRun
 	matrixCombinations := matrix.FanOut(*rpt.PipelineTask.Matrix).ToMap()
->>>>>>> Stashed changes
 	for i, taskRunName := range rpt.TaskRunNames {
 		params := matrixCombinations[i]
 		taskRun, err := c.createTaskRun(ctx, taskRunName, params, rpt, pr)
@@ -837,8 +831,8 @@ func (c *Reconciler) createTaskRun(ctx context.Context, taskRunName string, para
 			Params:             params,
 			ServiceAccountName: taskRunSpec.TaskServiceAccountName,
 			PodTemplate:        taskRunSpec.TaskPodTemplate,
-			StepSpecs:          taskRunSpec.StepOverrides,
-			SidecarSpecs:       taskRunSpec.SidecarOverrides,
+			StepOverrides:      taskRunSpec.StepOverrides,
+			SidecarOverrides:   taskRunSpec.SidecarOverrides,
 			ComputeResources:   taskRunSpec.ComputeResources,
 		}}
 
@@ -871,11 +865,11 @@ func (c *Reconciler) createTaskRun(ctx context.Context, taskRunName string, para
 	}
 
 	logger.Infof("Creating a new TaskRun object %s for pipeline task %s", taskRunName, rpt.PipelineTask.Name)
-	return c.PipelineClientSet.TektonV1().TaskRuns(pr.Namespace).Create(ctx, tr, metav1.CreateOptions{})
+	return c.PipelineClientSet.Tektonv1().TaskRuns(pr.Namespace).Create(ctx, tr, metav1.CreateOptions{})
 }
 
-func (c *Reconciler) createRunObjects(ctx context.Context, rpt *resources.ResolvedPipelineTask, pr *v1.PipelineRun) ([]v1beta1.RunObject, error) {
-	var runObjects []v1beta1.RunObject
+func (c *Reconciler) createRunObjects(ctx context.Context, rpt *resources.ResolvedPipelineTask, pr *v1.PipelineRun) ([]v1.RunObject, error) {
+	var runObjects []v1.RunObject
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "createRunObjects")
 	defer span.End()
 	matrixCombinations := rpt.PipelineTask.Matrix.FanOut().ToParams()
@@ -890,7 +884,7 @@ func (c *Reconciler) createRunObjects(ctx context.Context, rpt *resources.Resolv
 	return runObjects, nil
 }
 
-func (c *Reconciler) createRunObject(ctx context.Context, runName string, params []v1.Param, rpt *resources.ResolvedPipelineTask, pr *v1.PipelineRun) (v1beta1.RunObject, error) {
+func (c *Reconciler) createRunObject(ctx context.Context, runName string, params []v1.Param, rpt *resources.ResolvedPipelineTask, pr *v1.PipelineRun) (v1.RunObject, error) {
 	ctx, span := c.tracerProvider.Tracer(TracerName).Start(ctx, "createRunObject")
 	defer span.End()
 	logger := logging.FromContext(ctx)
@@ -953,9 +947,9 @@ func (c *Reconciler) createRunObject(ctx context.Context, runName string, params
 		return c.PipelineClientSet.TektonV1alpha1().Runs(pr.Namespace).Create(ctx, r, metav1.CreateOptions{})
 	}
 
-	r := &v1beta1.CustomRun{
+	r := &v1.CustomRun{
 		ObjectMeta: objectMeta,
-		Spec: v1beta1.CustomRunSpec{
+		Spec: v1.CustomRunSpec{
 			Retries:            rpt.PipelineTask.Retries,
 			CustomRef:          rpt.PipelineTask.TaskRef,
 			Params:             params,
@@ -987,7 +981,7 @@ func (c *Reconciler) createRunObject(ctx context.Context, runName string, params
 	}
 
 	logger.Infof("Creating a new CustomRun object %s", runName)
-	return c.PipelineClientSet.TektonV1().CustomRuns(pr.Namespace).Create(ctx, r, metav1.CreateOptions{})
+	return c.PipelineClientSet.Tektonv1().CustomRuns(pr.Namespace).Create(ctx, r, metav1.CreateOptions{})
 }
 
 // propagateWorkspaces identifies the workspaces that the pipeline task usess
@@ -1212,7 +1206,7 @@ func (c *Reconciler) updateLabelsAndAnnotations(ctx context.Context, pr *v1.Pipe
 		// Properly merge labels and annotations, as the labels *might* have changed during the reconciliation
 		newPr.Labels = kmap.Union(newPr.Labels, pr.Labels)
 		newPr.Annotations = kmap.Union(newPr.Annotations, pr.Annotations)
-		return c.PipelineClientSet.TektonV1().PipelineRuns(pr.Namespace).Update(ctx, newPr, metav1.UpdateOptions{})
+		return c.PipelineClientSet.Tektonv1().PipelineRuns(pr.Namespace).Update(ctx, newPr, metav1.UpdateOptions{})
 	}
 	return newPr, nil
 }
@@ -1266,7 +1260,7 @@ func (c *Reconciler) updatePipelineRunStatusFromInformer(ctx context.Context, pr
 		logger.Errorf("could not list TaskRuns %#v", err)
 		return err
 	}
-	var runObjects []v1beta1.RunObject
+	var runObjects []v1.RunObject
 
 	if cfg.FeatureFlags.CustomTaskVersion == config.CustomTaskVersionAlpha {
 		legacyRuns, err := c.runLister.Runs(pr.Namespace).List(k8slabels.SelectorFromSet(pipelineRunLabels))
@@ -1291,7 +1285,7 @@ func (c *Reconciler) updatePipelineRunStatusFromInformer(ctx context.Context, pr
 	return updatePipelineRunStatusFromChildObjects(ctx, logger, pr, taskRuns, runObjects)
 }
 
-func updatePipelineRunStatusFromChildObjects(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, taskRuns []*v1.TaskRun, runObjects []v1beta1.RunObject) error {
+func updatePipelineRunStatusFromChildObjects(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, taskRuns []*v1.TaskRun, runObjects []v1.RunObject) error {
 	updatePipelineRunStatusFromChildRefs(logger, pr, taskRuns, runObjects)
 
 	return validateChildObjectsInPipelineRunStatus(ctx, pr.Status)
@@ -1330,11 +1324,11 @@ func filterTaskRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.Pipeli
 }
 
 // filterRunsForPipelineRunStatus filters the given slice of run objects, returning information only those owned by the given PipelineRun.
-func filterRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.PipelineRun, runObjects []v1beta1.RunObject) ([]string, []string, []schema.GroupVersionKind, []*v1beta1.CustomRunStatus) {
+func filterRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.PipelineRun, runObjects []v1.RunObject) ([]string, []string, []schema.GroupVersionKind, []*v1.CustomRunStatus) {
 	var names []string
 	var taskLabels []string
 	var gvks []schema.GroupVersionKind
-	var statuses []*v1beta1.CustomRunStatus
+	var statuses []*v1.CustomRunStatus
 
 	// Loop over all the run objects associated to Tasks
 	for _, runObj := range runObjects {
@@ -1348,17 +1342,13 @@ func filterRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.PipelineRu
 		names = append(names, runObj.GetObjectMeta().GetName())
 		taskLabels = append(taskLabels, runObj.GetObjectMeta().GetLabels()[pipeline.PipelineTaskLabelKey])
 
-		switch r := runObj.(type) {
-		case *v1beta1.CustomRun:
-			statuses = append(statuses, &r.Status)
+		switch run := runObj.(type) {
+		case *v1.CustomRun:
+			statuses = append(statuses, &run.Status)
 			// We can't just get the gvk from the run's TypeMeta because that isn't populated for resources created through the fake client.
-<<<<<<< Updated upstream
-			gvks = append(gvks, v1beta1.SchemeGroupVersion.WithKind(customRun))
-=======
 			gvks = append(gvks, v1.SchemeGroupVersion.WithKind(pipeline.CustomRunControllerName))
->>>>>>> Stashed changes
 		case *v1alpha1.Run:
-			crStatus := runv1beta1.FromRunStatus(r.Status)
+			crStatus := runv1.FromRunStatus(run.Status)
 			statuses = append(statuses, &crStatus)
 			// We can't just get the gvk from the run's TypeMeta because that isn't populated for resources created through the fake client.
 			gvks = append(gvks, v1alpha1.SchemeGroupVersion.WithKind(run))
@@ -1368,7 +1358,7 @@ func filterRunsForPipelineRunStatus(logger *zap.SugaredLogger, pr *v1.PipelineRu
 	return names, taskLabels, gvks, statuses
 }
 
-func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.PipelineRun, trs []*v1.TaskRun, runObjects []v1beta1.RunObject) {
+func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.PipelineRun, trs []*v1.TaskRun, runObjects []v1.RunObject) {
 	// If no TaskRun or RunObject was found, nothing to be done. We never remove child references from the status.
 	// We do still return an empty map of TaskRun/Run names keyed by PipelineTask name for later functions.
 	if len(trs) == 0 && len(runObjects) == 0 {
@@ -1397,13 +1387,8 @@ func updatePipelineRunStatusFromChildRefs(logger *zap.SugaredLogger, pr *v1.Pipe
 			// Since this was recovered now, add it to the map, or it might be overwritten
 			childRefByName[tr.Name] = &v1.ChildStatusReference{
 				TypeMeta: runtime.TypeMeta{
-<<<<<<< Updated upstream
-					APIVersion: v1beta1.SchemeGroupVersion.String(),
-					Kind:       taskRun,
-=======
 					APIVersion: v1.SchemeGroupVersion.String(),
 					Kind:       pipeline.TaskRunControllerName,
->>>>>>> Stashed changes
 				},
 				Name:             tr.Name,
 				PipelineTaskName: pipelineTaskName,

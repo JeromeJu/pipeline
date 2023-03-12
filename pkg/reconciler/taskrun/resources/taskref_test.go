@@ -534,28 +534,8 @@ func TestGetTaskFunc_RemoteResolution(t *testing.T) {
 	ctx := context.Background()
 	cfg := config.FromContextOrDefaults(ctx)
 	ctx = config.ToContext(ctx, cfg)
-<<<<<<< Updated upstream
 	task := parse.MustParseV1beta1Task(t, taskYAMLString)
 	taskRef := &v1beta1.TaskRef{ResolverRef: v1beta1.ResolverRef{Resolver: "git"}}
-=======
-	task := parse.MustParsev1Task(t, taskYAMLString)
-	taskRef := &v1.TaskRef{ResolverRef: v1.ResolverRef{Resolver: "git"}}
-	taskYAML := strings.Join([]string{
-		"kind: Task",
-		"apiVersion: tekton.dev/v1",
-		taskYAMLString,
-	}, "\n")
-	resolved := test.NewResolvedResource([]byte(taskYAML), nil, sampleConfigSource.DeepCopy(), nil)
-	requester := test.NewRequester(resolved, nil)
-	tr := &v1.TaskRun{
-		ObjectMeta: metav1.ObjectMeta{Namespace: "default"},
-		Spec: v1.TaskRunSpec{
-			TaskRef:            taskRef,
-			ServiceAccountName: "default",
-		},
-	}
-	fn := resources.GetTaskFunc(ctx, nil, nil, requester, tr, tr.Spec.TaskRef, "", "default", "default")
->>>>>>> Stashed changes
 
 	testcases := []struct {
 		name     string

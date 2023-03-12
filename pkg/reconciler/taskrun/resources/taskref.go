@@ -189,7 +189,6 @@ func resolveTask(ctx context.Context, resolver remote.Resolver, name string, kin
 }
 
 // readRuntimeObjectAsTask tries to convert a generic runtime.Object
-<<<<<<< Updated upstream
 // into a v1beta1.TaskObject type so that its meta and spec fields
 // can be read. v1 object will be converted to v1beta1 and returned.
 // An error is returned if the given object is not a
@@ -211,15 +210,6 @@ func readRuntimeObjectAsTask(ctx context.Context, obj runtime.Object) (v1beta1.T
 			return nil, err
 		}
 		return t, nil
-=======
-// into a v1.TaskObject type so that its meta and spec fields
-// can be read. An error is returned if the given object is not a
-// TaskObject or if there is an error validating or upgrading an
-// older TaskObject into its v1 equivalent.
-func readRuntimeObjectAsTask(ctx context.Context, obj runtime.Object) (v1.TaskObject, error) {
-	if task, ok := obj.(v1.TaskObject); ok {
-		return task, nil
->>>>>>> Stashed changes
 	}
 	return nil, errors.New("resource is not a task")
 }
@@ -237,7 +227,7 @@ type LocalTaskRefResolver struct {
 // https://github.com/tektoncd/pipeline/issues/5522
 func (l *LocalTaskRefResolver) GetTask(ctx context.Context, name string) (v1.TaskObject, *v1.ConfigSource, error) {
 	if l.Kind == v1.ClusterTaskKind {
-		task, err := l.Tektonclient.TektonV1().ClusterTasks().Get(ctx, name, metav1.GetOptions{})
+		task, err := l.Tektonclient.Tektonv1().ClusterTasks().Get(ctx, name, metav1.GetOptions{})
 		if err != nil {
 			return nil, nil, err
 		}
@@ -248,7 +238,7 @@ func (l *LocalTaskRefResolver) GetTask(ctx context.Context, name string) (v1.Tas
 	if l.Namespace == "" {
 		return nil, nil, fmt.Errorf("must specify namespace to resolve reference to task %s", name)
 	}
-	task, err := l.Tektonclient.TektonV1().Tasks(l.Namespace).Get(ctx, name, metav1.GetOptions{})
+	task, err := l.Tektonclient.Tektonv1().Tasks(l.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if err != nil {
 		return nil, nil, err
 	}

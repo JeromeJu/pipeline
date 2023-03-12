@@ -884,10 +884,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "pear",
 					ContainerName: "step-pear",
 				}},
-<<<<<<< Updated upstream
-				Sidecars: []v1beta1.SidecarState{},
-				TaskRunResults: []v1beta1.TaskRunResult{{
-=======
 				Sidecars: []v1.SidecarState{},
 				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:        "resultNameOne",
@@ -895,7 +891,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ResultType: v1.PipelineResourceResultType,
 				}},
 				TaskRunResults: []v1.TaskRunResult{{
->>>>>>> Stashed changes
 					Name:  "resultNameThree",
 					Type:  v1.ResultsTypeString,
 					Value: *v1.NewStructuredValues(""),
@@ -928,10 +923,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "pear",
 					ContainerName: "step-pear",
 				}},
-<<<<<<< Updated upstream
-				Sidecars: []v1beta1.SidecarState{},
-				TaskRunResults: []v1beta1.TaskRunResult{{
-=======
 				Sidecars: []v1.SidecarState{},
 				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:        "resultNameOne",
@@ -939,7 +930,6 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ResultType: v1.PipelineResourceResultType,
 				}},
 				TaskRunResults: []v1.TaskRunResult{{
->>>>>>> Stashed changes
 					Name:  "resultNameThree",
 					Type:  v1.ResultsTypeString,
 					Value: *v1.NewStructuredValues(""),

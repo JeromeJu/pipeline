@@ -187,11 +187,7 @@ func TestBuild_JoinMultipleRoots(t *testing.T) {
 			},
 		},
 	}
-<<<<<<< Updated upstream
-	zRunsAfterx := v1beta1.PipelineTask{
-=======
 	zDependsOnX := v1.PipelineTask{
->>>>>>> Stashed changes
 		Name:     "z",
 		RunAfter: []string{"x"},
 	}
@@ -227,13 +223,8 @@ func TestBuild_JoinMultipleRoots(t *testing.T) {
 	}
 	p := &v1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{Name: "pipeline"},
-<<<<<<< Updated upstream
-		Spec: v1beta1.PipelineSpec{
-			Tasks: []v1beta1.PipelineTask{a, xDependsOnA, yDependsOnARunsAfterB, zRunsAfterx, b, c},
-=======
 		Spec: v1.PipelineSpec{
 			Tasks: []v1.PipelineTask{a, xDependsOnA, yDependsOnARunsAfterB, zDependsOnX, b, c},
->>>>>>> Stashed changes
 		},
 	}
 	g, err := dag.Build(v1.PipelineTaskList(p.Spec.Tasks), v1.PipelineTaskList(p.Spec.Tasks).Deps())
@@ -263,11 +254,7 @@ func TestBuild_FanInFanOut(t *testing.T) {
 			Value: *v1.NewStructuredValues("$(tasks.a.results.result)"),
 		}},
 	}
-<<<<<<< Updated upstream
-	eDependsOnA := v1beta1.PipelineTask{
-=======
 	eRunsAfterA := v1.PipelineTask{
->>>>>>> Stashed changes
 		Name: "e",
 		TaskSpec: &v1.EmbeddedTask{TaskSpec: v1.TaskSpec{
 			Results: []v1.TaskResult{{
@@ -326,13 +313,8 @@ func TestBuild_FanInFanOut(t *testing.T) {
 	}
 	p := &v1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{Name: "pipeline"},
-<<<<<<< Updated upstream
-		Spec: v1beta1.PipelineSpec{
-			Tasks: []v1beta1.PipelineTask{a, dDependsOnA, eDependsOnA, fDependsOnDAndE, gRunsAfterF},
-=======
 		Spec: v1.PipelineSpec{
 			Tasks: []v1.PipelineTask{a, dDependsOnA, eRunsAfterA, fDependsOnDAndE, gRunsAfterF},
->>>>>>> Stashed changes
 		},
 	}
 	g, err := dag.Build(v1.PipelineTaskList(p.Spec.Tasks), v1.PipelineTaskList(p.Spec.Tasks).Deps())
@@ -452,11 +434,7 @@ func TestBuild_InvalidDAG(t *testing.T) {
 			Value: *v1.NewStructuredValues("$(tasks.a.results.result)"),
 		}},
 	}
-<<<<<<< Updated upstream
-	zRunsAfterx := v1beta1.PipelineTask{
-=======
 	zDependsOnX := v1.PipelineTask{
->>>>>>> Stashed changes
 		Name: "z",
 		TaskSpec: &v1.EmbeddedTask{TaskSpec: v1.TaskSpec{
 			Results: []v1.TaskResult{{
@@ -530,11 +508,7 @@ func TestBuild_InvalidDAG(t *testing.T) {
 			}},
 		}},
 	}
-<<<<<<< Updated upstream
-	cDependsOnA := v1beta1.PipelineTask{
-=======
 	cRunsAfterA := v1.PipelineTask{
->>>>>>> Stashed changes
 		Name: "c",
 		Params: []v1.Param{{
 			Value: *v1.NewStructuredValues("$(tasks.a.results.result)"),
@@ -561,11 +535,7 @@ func TestBuild_InvalidDAG(t *testing.T) {
 		Name:     "f",
 		RunAfter: []string{"d"},
 	}
-<<<<<<< Updated upstream
-	gRunAfterF := v1beta1.PipelineTask{
-=======
 	gDependsOnF := v1.PipelineTask{
->>>>>>> Stashed changes
 		Name:     "g",
 		RunAfter: []string{"f"},
 	}
@@ -595,11 +565,7 @@ func TestBuild_InvalidDAG(t *testing.T) {
 		// |
 		// z ("z" depends on resource from "x")
 		name: "cycle-from",
-<<<<<<< Updated upstream
-		spec: v1beta1.PipelineSpec{Tasks: []v1beta1.PipelineTask{xDependsOnA, zRunsAfterx, aDependsOnZ}},
-=======
 		spec: v1.PipelineSpec{Tasks: []v1.PipelineTask{xDependsOnA, zDependsOnX, aDependsOnZ}},
->>>>>>> Stashed changes
 		err:  "cycle detected",
 	}, {
 		// a (also "a" runAfter "z")
@@ -632,11 +598,7 @@ func TestBuild_InvalidDAG(t *testing.T) {
 		//     |
 		//     g
 		name: "multiple-branches-with-one-cyclic-branch",
-<<<<<<< Updated upstream
-		spec: v1beta1.PipelineSpec{Tasks: []v1beta1.PipelineTask{aRunsAfterE, bDependsOnA, cDependsOnA, dDependsOnBAndC, eRunsAfterD, fRunsAfterD, gRunAfterF}},
-=======
 		spec: v1.PipelineSpec{Tasks: []v1.PipelineTask{aRunsAfterE, bDependsOnA, cRunsAfterA, dDependsOnBAndC, eRunsAfterD, fRunsAfterD, gDependsOnF}},
->>>>>>> Stashed changes
 		err:  "cycle detected",
 	}, {
 		name: "duplicate-tasks",

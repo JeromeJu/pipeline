@@ -22,12 +22,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-<<<<<<< Updated upstream
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-=======
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
-	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
->>>>>>> Stashed changes
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"github.com/tektoncd/pipeline/pkg/workspace"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -39,19 +34,8 @@ import (
 )
 
 var (
-<<<<<<< Updated upstream
 	simpleTaskSpec = &v1beta1.TaskSpec{
 		Sidecars: []v1beta1.Sidecar{{
-=======
-	images = pipeline.Images{
-		EntrypointImage: "override-with-entrypoint:latest",
-		NopImage:        "override-with-nop:latest",
-		ShellImage:      "busybox",
-	}
-
-	simpleTaskSpec = &v1.TaskSpec{
-		Sidecars: []v1.Sidecar{{
->>>>>>> Stashed changes
 			Name:  "foo",
 			Image: `$(params["myimage"])`,
 			Env: []corev1.EnvVar{{
