@@ -22,8 +22,8 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/k8sevent"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -56,11 +56,11 @@ func TestSendCloudEventWithRetries(t *testing.T) {
 		clientBehaviour: cloudevent.FakeClientBehaviour{
 			SendSuccessfully: true,
 		},
-		object: &v1beta1.TaskRun{
+		object: &v1.TaskRun{
 			ObjectMeta: metav1.ObjectMeta{
 				SelfLink: "/taskruns/test1",
 			},
-			Status: v1beta1.TaskRunStatus{Status: objectStatus},
+			Status: v1.TaskRunStatus{Status: objectStatus},
 		},
 		wantCEvents: []string{"Context Attributes,"},
 		wantEvents:  []string{},
@@ -69,11 +69,11 @@ func TestSendCloudEventWithRetries(t *testing.T) {
 		clientBehaviour: cloudevent.FakeClientBehaviour{
 			SendSuccessfully: true,
 		},
-		object: &v1beta1.PipelineRun{
+		object: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{
 				SelfLink: "/pipelineruns/test1",
 			},
-			Status: v1beta1.PipelineRunStatus{Status: objectStatus},
+			Status: v1.PipelineRunStatus{Status: objectStatus},
 		},
 		wantCEvents: []string{"Context Attributes,"},
 		wantEvents:  []string{},
@@ -82,8 +82,8 @@ func TestSendCloudEventWithRetries(t *testing.T) {
 		clientBehaviour: cloudevent.FakeClientBehaviour{
 			SendSuccessfully: false,
 		},
-		object: &v1beta1.PipelineRun{
-			Status: v1beta1.PipelineRunStatus{Status: objectStatus},
+		object: &v1.PipelineRun{
+			Status: v1.PipelineRunStatus{Status: objectStatus},
 		},
 		wantCEvents: []string{},
 		wantEvents:  []string{"Warning Cloud Event Failure"},
@@ -100,7 +100,7 @@ func TestSendCloudEventWithRetries(t *testing.T) {
 		clientBehaviour: cloudevent.FakeClientBehaviour{
 			SendSuccessfully: true,
 		},
-		object:      &v1beta1.CustomRun{},
+		object:      &v1.CustomRun{},
 		wantCEvents: []string{"Context Attributes,"},
 		wantEvents:  []string{},
 	}}
@@ -128,15 +128,15 @@ func TestSendCloudEventWithRetriesInvalid(t *testing.T) {
 		wantEvent  string
 	}{{
 		name: "test-send-cloud-event-invalid-taskrun",
-		object: &v1beta1.TaskRun{
-			Status: v1beta1.TaskRunStatus{},
+		object: &v1.TaskRun{
+			Status: v1.TaskRunStatus{},
 		},
 		wantCEvent: "Context Attributes,",
 		wantEvent:  "",
 	}, {
 		name: "test-send-cloud-event-pipelinerun",
-		object: &v1beta1.PipelineRun{
-			Status: v1beta1.PipelineRunStatus{},
+		object: &v1.PipelineRun{
+			Status: v1.PipelineRunStatus{},
 		},
 		wantCEvent: "Context Attributes,",
 		wantEvent:  "",
@@ -158,7 +158,7 @@ func TestSendCloudEventWithRetriesInvalid(t *testing.T) {
 
 func TestSendCloudEventWithRetriesNoClient(t *testing.T) {
 	ctx := setupFakeContext(t, cloudevent.FakeClientBehaviour{}, false, 0)
-	err := cloudevent.SendCloudEventWithRetries(ctx, &v1beta1.TaskRun{Status: v1beta1.TaskRunStatus{}})
+	err := cloudevent.SendCloudEventWithRetries(ctx, &v1.TaskRun{Status: v1.TaskRunStatus{}})
 	if err == nil {
 		t.Fatalf("Expected an error sending cloud events with no client in the context, got none")
 	}
@@ -225,14 +225,14 @@ func TestEmitCloudEventsWhenConditionChange(t *testing.T) {
 		Conditions: []apis.Condition{{
 			Type:   apis.ConditionSucceeded,
 			Status: corev1.ConditionUnknown,
-			Reason: v1beta1.PipelineRunReasonStarted.String(),
+			Reason: v1.PipelineRunReasonStarted.String(),
 		}},
 	}
-	object := &v1beta1.PipelineRun{
+	object := &v1.PipelineRun{
 		ObjectMeta: metav1.ObjectMeta{
 			SelfLink: "/pipelineruns/test1",
 		},
-		Status: v1beta1.PipelineRunStatus{Status: objectStatus},
+		Status: v1.PipelineRunStatus{Status: objectStatus},
 	}
 	after := &apis.Condition{
 		Type:    apis.ConditionSucceeded,

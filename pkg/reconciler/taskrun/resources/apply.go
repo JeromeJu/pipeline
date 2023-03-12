@@ -24,7 +24,7 @@ import (
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/container"
 	"github.com/tektoncd/pipeline/pkg/pod"
 	"github.com/tektoncd/pipeline/pkg/substitution"
@@ -42,13 +42,13 @@ var (
 		"params.%s",
 		"params[%q]",
 		"params['%s']",
-		// FIXME(vdemeester) Remove that with deprecating v1beta1
+		// FIXME(vdemeester) Remove that with deprecating v1
 		"inputs.params.%s",
 	}
 )
 
 // ApplyParameters applies the params from a TaskRun.Input.Parameters to a TaskSpec
-func ApplyParameters(ctx context.Context, spec *v1beta1.TaskSpec, tr *v1beta1.TaskRun, defaults ...v1beta1.ParamSpec) *v1beta1.TaskSpec {
+func ApplyParameters(ctx context.Context, spec *v1.TaskSpec, tr *v1.TaskRun, defaults ...v1.ParamSpec) *v1.TaskSpec {
 	// This assumes that the TaskRun inputs have been validated against what the Task requests.
 
 	// stringReplacements is used for standard single-string stringReplacements, while arrayReplacements contains arrays
@@ -60,7 +60,7 @@ func ApplyParameters(ctx context.Context, spec *v1beta1.TaskSpec, tr *v1beta1.Ta
 	for _, p := range defaults {
 		if p.Default != nil {
 			switch p.Default.Type {
-			case v1beta1.ParamTypeArray:
+			case v1.ParamTypeArray:
 				for _, pattern := range paramPatterns {
 					// array indexing for param is beta feature
 					if config.CheckAlphaOrBetaAPIFields(ctx) {
@@ -70,7 +70,7 @@ func ApplyParameters(ctx context.Context, spec *v1beta1.TaskSpec, tr *v1beta1.Ta
 					}
 					arrayReplacements[fmt.Sprintf(pattern, p.Name)] = p.Default.ArrayVal
 				}
-			case v1beta1.ParamTypeObject:
+			case v1.ParamTypeObject:
 				for k, v := range p.Default.ObjectVal {
 					stringReplacements[fmt.Sprintf(objectIndividualVariablePattern, p.Name, k)] = v
 				}
@@ -93,7 +93,7 @@ func ApplyParameters(ctx context.Context, spec *v1beta1.TaskSpec, tr *v1beta1.Ta
 	return ApplyReplacements(spec, stringReplacements, arrayReplacements)
 }
 
-func paramsFromTaskRun(ctx context.Context, tr *v1beta1.TaskRun) (map[string]string, map[string][]string) {
+func paramsFromTaskRun(ctx context.Context, tr *v1.TaskRun) (map[string]string, map[string][]string) {
 	// stringReplacements is used for standard single-string stringReplacements, while arrayReplacements contains arrays
 	// that need to be further processed.
 	stringReplacements := map[string]string{}
@@ -101,7 +101,7 @@ func paramsFromTaskRun(ctx context.Context, tr *v1beta1.TaskRun) (map[string]str
 
 	for _, p := range tr.Spec.Params {
 		switch p.Value.Type {
-		case v1beta1.ParamTypeArray:
+		case v1.ParamTypeArray:
 			for _, pattern := range paramPatterns {
 				// array indexing for param is beta feature
 				if config.CheckAlphaOrBetaAPIFields(ctx) {
@@ -111,7 +111,7 @@ func paramsFromTaskRun(ctx context.Context, tr *v1beta1.TaskRun) (map[string]str
 				}
 				arrayReplacements[fmt.Sprintf(pattern, p.Name)] = p.Value.ArrayVal
 			}
-		case v1beta1.ParamTypeObject:
+		case v1.ParamTypeObject:
 			for k, v := range p.Value.ObjectVal {
 				stringReplacements[fmt.Sprintf(objectIndividualVariablePattern, p.Name, k)] = v
 			}
@@ -125,7 +125,7 @@ func paramsFromTaskRun(ctx context.Context, tr *v1beta1.TaskRun) (map[string]str
 	return stringReplacements, arrayReplacements
 }
 
-func getContextReplacements(taskName string, tr *v1beta1.TaskRun) map[string]string {
+func getContextReplacements(taskName string, tr *v1.TaskRun) map[string]string {
 	return map[string]string{
 		"context.taskRun.name":      tr.Name,
 		"context.task.name":         taskName,
@@ -137,14 +137,14 @@ func getContextReplacements(taskName string, tr *v1beta1.TaskRun) map[string]str
 
 // ApplyContexts applies the substitution from $(context.(taskRun|task).*) with the specified values.
 // Uses "" as a default if a value is not available.
-func ApplyContexts(spec *v1beta1.TaskSpec, taskName string, tr *v1beta1.TaskRun) *v1beta1.TaskSpec {
+func ApplyContexts(spec *v1.TaskSpec, taskName string, tr *v1.TaskRun) *v1.TaskSpec {
 	return ApplyReplacements(spec, getContextReplacements(taskName, tr), map[string][]string{})
 }
 
 // ApplyWorkspaces applies the substitution from paths that the workspaces in declarations mounted to, the
 // volumes that bindings are realized with in the task spec and the PersistentVolumeClaim names for the
 // workspaces.
-func ApplyWorkspaces(ctx context.Context, spec *v1beta1.TaskSpec, declarations []v1beta1.WorkspaceDeclaration, bindings []v1beta1.WorkspaceBinding, vols map[string]corev1.Volume) *v1beta1.TaskSpec {
+func ApplyWorkspaces(ctx context.Context, spec *v1.TaskSpec, declarations []v1.WorkspaceDeclaration, bindings []v1.WorkspaceBinding, vols map[string]corev1.Volume) *v1.TaskSpec {
 	stringReplacements := map[string]string{}
 
 	bindNames := sets.NewString()
@@ -185,7 +185,7 @@ func ApplyWorkspaces(ctx context.Context, spec *v1beta1.TaskSpec, declarations [
 // it in the fields of the TaskSpec. A new updated TaskSpec is returned. Steps or Sidecars in the TaskSpec
 // that override the mountPath will receive that mountPath in place of the variable's value. Other Steps and
 // Sidecars will see either the workspace's declared mountPath or the default of /workspaces/<name>.
-func applyWorkspaceMountPath(variable string, spec *v1beta1.TaskSpec, declaration v1beta1.WorkspaceDeclaration) *v1beta1.TaskSpec {
+func applyWorkspaceMountPath(variable string, spec *v1.TaskSpec, declaration v1.WorkspaceDeclaration) *v1.TaskSpec {
 	stringReplacements := map[string]string{variable: ""}
 	emptyArrayReplacements := map[string][]string{}
 	defaultMountPath := declaration.GetMountPath()
@@ -217,7 +217,7 @@ func applyWorkspaceMountPath(variable string, spec *v1beta1.TaskSpec, declaratio
 
 // ApplyTaskResults applies the substitution from values in results which are referenced in spec as subitems
 // of the replacementStr.
-func ApplyTaskResults(spec *v1beta1.TaskSpec) *v1beta1.TaskSpec {
+func ApplyTaskResults(spec *v1.TaskSpec) *v1.TaskSpec {
 	stringReplacements := map[string]string{}
 
 	patterns := []string{
@@ -236,7 +236,7 @@ func ApplyTaskResults(spec *v1beta1.TaskSpec) *v1beta1.TaskSpec {
 
 // ApplyStepExitCodePath replaces the occurrences of exitCode path with the absolute tekton internal path
 // Replace $(steps.<step-name>.exitCode.path) with pipeline.StepPath/<step-name>/exitCode
-func ApplyStepExitCodePath(spec *v1beta1.TaskSpec) *v1beta1.TaskSpec {
+func ApplyStepExitCodePath(spec *v1.TaskSpec) *v1.TaskSpec {
 	stringReplacements := map[string]string{}
 
 	for i, step := range spec.Steps {
@@ -248,7 +248,7 @@ func ApplyStepExitCodePath(spec *v1beta1.TaskSpec) *v1beta1.TaskSpec {
 
 // ApplyCredentialsPath applies a substitution of the key $(credentials.path) with the path that credentials
 // from annotated secrets are written to.
-func ApplyCredentialsPath(spec *v1beta1.TaskSpec, path string) *v1beta1.TaskSpec {
+func ApplyCredentialsPath(spec *v1.TaskSpec, path string) *v1.TaskSpec {
 	stringReplacements := map[string]string{
 		"credentials.path": path,
 	}
@@ -256,7 +256,7 @@ func ApplyCredentialsPath(spec *v1beta1.TaskSpec, path string) *v1beta1.TaskSpec
 }
 
 // ApplyReplacements replaces placeholders for declared parameters with the specified replacements.
-func ApplyReplacements(spec *v1beta1.TaskSpec, stringReplacements map[string]string, arrayReplacements map[string][]string) *v1beta1.TaskSpec {
+func ApplyReplacements(spec *v1.TaskSpec, stringReplacements map[string]string, arrayReplacements map[string][]string) *v1.TaskSpec {
 	spec = spec.DeepCopy()
 
 	// Apply variable expansion to steps fields.

@@ -21,8 +21,8 @@ import (
 	"strings"
 	"time"
 
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
 	"go.uber.org/zap"
 	"gomodules.xyz/jsonpatch/v2"
@@ -41,12 +41,12 @@ func init() {
 		{
 			Operation: "add",
 			Path:      "/spec/status",
-			Value:     v1beta1.TaskRunSpecStatusCancelled,
+			Value:     v1.TaskRunSpecStatusCancelled,
 		},
 		{
 			Operation: "add",
 			Path:      "/spec/statusMessage",
-			Value:     v1beta1.TaskRunCancelledByPipelineTimeoutMsg,
+			Value:     v1.TaskRunCancelledByPipelineTimeoutMsg,
 		}})
 	if err != nil {
 		log.Fatalf("failed to marshal TaskRun timeout patch bytes: %v", err)
@@ -55,12 +55,12 @@ func init() {
 		{
 			Operation: "add",
 			Path:      "/spec/status",
-			Value:     v1beta1.CustomRunSpecStatusCancelled,
+			Value:     v1.CustomRunSpecStatusCancelled,
 		},
 		{
 			Operation: "add",
 			Path:      "/spec/statusMessage",
-			Value:     v1beta1.CustomRunCancelledByPipelineTimeoutMsg,
+			Value:     v1.CustomRunCancelledByPipelineTimeoutMsg,
 		}})
 	if err != nil {
 		log.Fatalf("failed to marshal CustomRun timeout patch bytes: %v", err)
@@ -82,12 +82,12 @@ func init() {
 }
 
 // timeoutPipelineRun marks the PipelineRun as timed out and any resolved TaskRun(s) too.
-func timeoutPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface) error {
+func timeoutPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface) error {
 	errs := timeoutPipelineTasks(ctx, logger, pr, clientSet)
 
 	// If we successfully timed out all the TaskRuns and Runs, we can consider the PipelineRun timed out.
 	if len(errs) == 0 {
-		reason := v1beta1.PipelineRunReasonTimedOut.String()
+		reason := v1.PipelineRunReasonTimedOut.String()
 
 		pr.Status.SetCondition(&apis.Condition{
 			Type:    apis.ConditionSucceeded,
@@ -112,7 +112,7 @@ func timeoutPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1be
 }
 
 func timeoutCustomRun(ctx context.Context, customRunName string, namespace string, clientSet clientset.Interface) error {
-	_, err := clientSet.TektonV1beta1().CustomRuns(namespace).Patch(ctx, customRunName, types.JSONPatchType, timeoutCustomRunPatchBytes, metav1.PatchOptions{}, "")
+	_, err := clientSet.Tektonv1().CustomRuns(namespace).Patch(ctx, customRunName, types.JSONPatchType, timeoutCustomRunPatchBytes, metav1.PatchOptions{}, "")
 	return err
 }
 
@@ -122,12 +122,12 @@ func timeoutRun(ctx context.Context, runName string, namespace string, clientSet
 }
 
 // timeoutPipelineTaskRuns patches `TaskRun` and `Run` with canceled status and an appropriate message
-func timeoutPipelineTasks(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface) []string {
+func timeoutPipelineTasks(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface) []string {
 	return timeoutPipelineTasksForTaskNames(ctx, logger, pr, clientSet, sets.NewString())
 }
 
 // timeoutPipelineTasksForTaskNames patches `TaskRun`s and `Run`s for the given task names, or all if no task names are given, with canceled status and appropriate message
-func timeoutPipelineTasksForTaskNames(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface, taskNames sets.String) []string {
+func timeoutPipelineTasksForTaskNames(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface, taskNames sets.String) []string {
 	errs := []string{}
 
 	trNames, customRunNames, runNames, err := getChildObjectsFromPRStatusForTaskNames(ctx, pr.Status, taskNames)
@@ -138,7 +138,7 @@ func timeoutPipelineTasksForTaskNames(ctx context.Context, logger *zap.SugaredLo
 	for _, taskRunName := range trNames {
 		logger.Infof("cancelling TaskRun %s for timeout", taskRunName)
 
-		if _, err := clientSet.TektonV1beta1().TaskRuns(pr.Namespace).Patch(ctx, taskRunName, types.JSONPatchType, timeoutTaskRunPatchBytes, metav1.PatchOptions{}, ""); err != nil {
+		if _, err := clientSet.Tektonv1().TaskRuns(pr.Namespace).Patch(ctx, taskRunName, types.JSONPatchType, timeoutTaskRunPatchBytes, metav1.PatchOptions{}, ""); err != nil {
 			errs = append(errs, fmt.Errorf("Failed to patch TaskRun `%s` with cancellation: %s", taskRunName, err).Error())
 			continue
 		}

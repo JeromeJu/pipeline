@@ -23,14 +23,14 @@ import (
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lru "github.com/hashicorp/golang-lru"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 )
 
 // Struct to unmarshal the event data
 type eventData struct {
-	Run       *v1alpha1.Run      `json:"run,omitempty"`
-	CustomRun *v1beta1.CustomRun `json:"customRun,omitempty"`
+	Run       *v1alpha1.Run `json:"run,omitempty"`
+	CustomRun *v1.CustomRun `json:"customRun,omitempty"`
 }
 
 // ContainsOrAddCloudEvent checks if the event exists in the cache

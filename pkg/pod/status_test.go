@@ -28,7 +28,6 @@ import (
 	"github.com/hashicorp/go-multierror"
 	"github.com/tektoncd/pipeline/internal/sidecarlogresults"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/test/diff"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/api/core/v1"
@@ -74,13 +73,13 @@ func TestSetTaskRunStatusBasedOnStepStatus(t *testing.T) {
 	}} {
 		t.Run(c.desc, func(t *testing.T) {
 			startTime := time.Date(2010, 1, 1, 1, 1, 1, 1, time.UTC)
-			tr := v1beta1.TaskRun{
+			tr := v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "task-run",
 					Namespace: "foo",
 				},
-				Status: v1beta1.TaskRunStatus{
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+				Status: v1.TaskRunStatus{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
 						StartTime: &metav1.Time{Time: startTime},
 					},
 				},
@@ -88,7 +87,7 @@ func TestSetTaskRunStatusBasedOnStepStatus(t *testing.T) {
 
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			merr := setTaskRunStatusBasedOnStepStatus(context.Background(), logger, c.ContainerStatuses, &tr, corev1.PodRunning, kubeclient, &v1beta1.TaskSpec{})
+			merr := setTaskRunStatusBasedOnStepStatus(context.Background(), logger, c.ContainerStatuses, &tr, corev1.PodRunning, kubeclient, &v1.TaskSpec{})
 			if merr != nil {
 				t.Errorf("setTaskRunStatusBasedOnStepStatus: %s", merr)
 			}
@@ -111,15 +110,15 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 		wantErr:       fmt.Errorf("%s", "Invalid result invalid character 'k' in literal false (expecting 'l')"),
 	}} {
 		t.Run(c.desc, func(t *testing.T) {
-			tr := v1beta1.TaskRun{
+			tr := v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "task-run",
 					Namespace: "foo",
 				},
-				Status: v1beta1.TaskRunStatus{
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						TaskSpec: &v1beta1.TaskSpec{
-							Results: []v1beta1.TaskResult{{
+				Status: v1.TaskRunStatus{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
+						TaskSpec: &v1.TaskSpec{
+							Results: []v1.TaskResult{{
 								Name: "result1",
 							}},
 						},
@@ -163,7 +162,7 @@ func TestSetTaskRunStatusBasedOnStepStatus_sidecar_logs(t *testing.T) {
 			})
 			var wantErr *multierror.Error
 			wantErr = multierror.Append(wantErr, c.wantErr)
-			merr := setTaskRunStatusBasedOnStepStatus(ctx, logger, []corev1.ContainerStatus{{}}, &tr, pod.Status.Phase, kubeclient, &v1beta1.TaskSpec{})
+			merr := setTaskRunStatusBasedOnStepStatus(ctx, logger, []corev1.ContainerStatus{{}}, &tr, pod.Status.Phase, kubeclient, &v1.TaskSpec{})
 
 			if d := cmp.Diff(wantErr.Error(), merr.Error()); d != "" {
 				t.Errorf("Got unexpected error  %s", diff.PrintWantGot(d))
@@ -177,16 +176,16 @@ func TestMakeTaskRunStatus(t *testing.T) {
 		desc      string
 		podStatus corev1.PodStatus
 		pod       corev1.Pod
-		want      v1beta1.TaskRunStatus
+		want      v1.TaskRunStatus
 	}{{
 		desc:      "empty",
 		podStatus: corev1.PodStatus{},
 
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -206,10 +205,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 123,
@@ -217,7 +216,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "state-name",
 					ContainerName: "step-state-name",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -240,10 +239,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 123,
@@ -252,7 +251,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerName: "step-state-name",
 					ImageID:       "image-id",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -269,10 +268,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				ImageID: "image-id",
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 0,
@@ -281,7 +280,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerName: "step-step-push",
 					ImageID:       "image-id",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -297,17 +296,17 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Running: &corev1.ContainerStateRunning{},
 					},
 					Name:          "running-step",
 					ContainerName: "step-running-step",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -328,10 +327,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
-			Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "\"step-failure\" exited with code 123 (image: \"image-id\"); for logs run: kubectl -n foo logs pod -c step-failure\n"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "\"step-failure\" exited with code 123 (image: \"image-id\"); for logs run: kubectl -n foo logs pod -c step-failure\n"),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 123,
@@ -341,7 +340,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerName: "step-failure",
 					ImageID:       "image-id",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -352,11 +351,11 @@ func TestMakeTaskRunStatus(t *testing.T) {
 			Phase:   corev1.PodFailed,
 			Message: "boom",
 		},
-		want: v1beta1.TaskRunStatus{
-			Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "boom"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "boom"),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -376,10 +375,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				ImageID: "image-id",
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
-			Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "OOMKilled"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "OOMKilled"),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Reason:   "OOMKilled",
@@ -389,7 +388,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerName: "step-step-push",
 					ImageID:       "image-id",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -397,11 +396,11 @@ func TestMakeTaskRunStatus(t *testing.T) {
 	}, {
 		desc:      "failure-unspecified",
 		podStatus: corev1.PodStatus{Phase: corev1.PodFailed},
-		want: v1beta1.TaskRunStatus{
-			Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "build failed for unspecified reasons."),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "build failed for unspecified reasons."),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -422,10 +421,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", `build step "step-status-name" is pending with reason "i'm pending"`),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Waiting: &corev1.ContainerStateWaiting{
 							Message: "i'm pending",
@@ -434,7 +433,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "status-name",
 					ContainerName: "step-status-name",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -447,11 +446,11 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Message: "the message",
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", `pod status "the type":"Unknown"; message: "the message"`),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -460,21 +459,21 @@ func TestMakeTaskRunStatus(t *testing.T) {
 			Phase:   corev1.PodPending,
 			Message: "pod status message",
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", "pod status message"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
 		desc:      "pending-no-message",
 		podStatus: corev1.PodStatus{Phase: corev1.PodPending},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusPending("Pending", "Pending"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -486,11 +485,11 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Message: "0/1 nodes are available: 1 Insufficient cpu.",
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusPending(ReasonExceededNodeResources, "TaskRun Pod exceeded available resources"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -505,11 +504,11 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusFailure(ReasonCreateContainerConfigError, "Failed to create pod due to config error"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps:    []v1beta1.StepState{},
-				Sidecars: []v1beta1.SidecarState{},
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps:    []v1.StepState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -530,17 +529,17 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Ready: true,
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Running: &corev1.ContainerStateRunning{},
 					},
 					Name:          "running-step",
 					ContainerName: "step-running-step",
 				}},
-				Sidecars: []v1beta1.SidecarState{{
+				Sidecars: []v1.SidecarState{{
 					ContainerState: corev1.ContainerState{
 						Running: &corev1.ContainerStateRunning{},
 					},
@@ -574,10 +573,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Ready: true,
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Waiting: &corev1.ContainerStateWaiting{
 							Reason:  "PodInitializing",
@@ -587,7 +586,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "waiting-step",
 					ContainerName: "step-waiting-step",
 				}},
-				Sidecars: []v1beta1.SidecarState{{
+				Sidecars: []v1.SidecarState{{
 					ContainerState: corev1.ContainerState{
 						Waiting: &corev1.ContainerStateWaiting{
 							Reason:  "PodInitializing",
@@ -622,17 +621,17 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				Ready: true,
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusRunning(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Running: &corev1.ContainerStateRunning{},
 					},
 					Name:          "running-step",
 					ContainerName: "step-running-step",
 				}},
-				Sidecars: []v1beta1.SidecarState{{
+				Sidecars: []v1.SidecarState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 1,
@@ -659,10 +658,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:12345","resourceName":"source-image"}]`,
@@ -670,8 +669,8 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "foo",
 					ContainerName: "step-foo",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:12345",
 					ResourceName: "source-image",
@@ -693,10 +692,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"resultValue","type":1}]`,
@@ -704,16 +703,16 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "bar",
 					ContainerName: "step-bar",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:1234",
 					ResourceName: "source-image",
 				}},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("resultValue"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("resultValue"),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -732,10 +731,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"resultValue","type":1}]`,
@@ -743,16 +742,16 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "banana",
 					ContainerName: "step-banana",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:1234",
 					ResourceName: "source-image",
 				}},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("resultValue"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("resultValue"),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -778,10 +777,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameOne","value":"resultValueOne","type":1},{"key":"resultNameTwo","value":"resultValueTwo","type":1}]`,
@@ -796,15 +795,15 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "two",
 					ContainerName: "step-two",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				Sidecars: []v1.SidecarState{},
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultNameOne",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("resultValueThree"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("resultValueThree"),
 				}, {
 					Name:  "resultNameTwo",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("resultValueTwo"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("resultValueTwo"),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -821,16 +820,16 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
-			Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "build failed for unspecified reasons."),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "build failed for unspecified reasons."),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{}},
 					Name:          "mango",
 					ContainerName: "step-mango",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -848,16 +847,16 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{}},
 					Name:          "pineapple",
 					ContainerName: "step-pineapple",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -874,10 +873,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameThree","value":"","type":1}]`,
@@ -885,11 +884,21 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "pear",
 					ContainerName: "step-pear",
 				}},
+<<<<<<< Updated upstream
 				Sidecars: []v1beta1.SidecarState{},
 				TaskRunResults: []v1beta1.TaskRunResult{{
+=======
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
+					Key:        "resultNameOne",
+					Value:      "",
+					ResultType: v1.PipelineResourceResultType,
+				}},
+				TaskRunResults: []v1.TaskRunResult{{
+>>>>>>> Stashed changes
 					Name:  "resultNameThree",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues(""),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues(""),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -908,10 +917,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				},
 			}},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultNameThree","value":"","type":1}]`,
@@ -919,11 +928,21 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "pear",
 					ContainerName: "step-pear",
 				}},
+<<<<<<< Updated upstream
 				Sidecars: []v1beta1.SidecarState{},
 				TaskRunResults: []v1beta1.TaskRunResult{{
+=======
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
+					Key:        "resultNameOne",
+					Value:      "",
+					ResultType: v1.PipelineResourceResultType,
+				}},
+				TaskRunResults: []v1.TaskRunResult{{
+>>>>>>> Stashed changes
 					Name:  "resultNameThree",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues(""),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues(""),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -978,10 +997,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				}},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{},
 					},
@@ -1008,7 +1027,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "fourth",
 					ContainerName: "step-fourth",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1043,10 +1062,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				}},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							ExitCode: 11,
@@ -1062,7 +1081,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "second",
 					ContainerName: "step-second",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
@@ -1091,10 +1110,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				}},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusPending("PullImageFailed", `build step "step-first" is pending with reason "Back-off pulling image xxxxxxx"`),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Waiting: &corev1.ContainerStateWaiting{
 							Reason:  "ImagePullBackOff",
@@ -1104,7 +1123,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					Name:          "first",
 					ContainerName: "step-first",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
+				Sidecars: []v1.SidecarState{},
 			},
 		},
 	}, {
@@ -1143,10 +1162,10 @@ func TestMakeTaskRunStatus(t *testing.T) {
 				}},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
-			Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "init container failed, \"init-A\" exited with code 1 (image: \"init-image-id-A\"); for logs run: kubectl -n foo logs pod -c init-A\n"),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+		want: v1.TaskRunStatus{
+			Status: statusFailure(v1.TaskRunReasonFailed.String(), "init container failed, \"init-A\" exited with code 1 (image: \"init-image-id-A\"); for logs run: kubectl -n foo logs pod -c init-A\n"),
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Waiting: &corev1.ContainerStateWaiting{
 							Reason: "PodInitializing",
@@ -1156,7 +1175,7 @@ func TestMakeTaskRunStatus(t *testing.T) {
 					ContainerName: "step-A",
 					ImageID:       "image-id-A",
 				}},
-				Sidecars:       []v1beta1.SidecarState{},
+				Sidecars:       []v1.SidecarState{},
 				CompletionTime: &metav1.Time{Time: time.Now()},
 			},
 		},
@@ -1175,20 +1194,20 @@ func TestMakeTaskRunStatus(t *testing.T) {
 			}
 
 			startTime := time.Date(2010, 1, 1, 1, 1, 1, 1, time.UTC)
-			tr := v1beta1.TaskRun{
+			tr := v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "task-run",
 					Namespace: "foo",
 				},
-				Status: v1beta1.TaskRunStatus{
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+				Status: v1.TaskRunStatus{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
 						StartTime: &metav1.Time{Time: startTime},
 					},
 				},
 			}
 			logger, _ := logging.NewLogger("", "status")
 			kubeclient := fakek8s.NewSimpleClientset()
-			got, err := MakeTaskRunStatus(context.Background(), logger, tr, &c.pod, kubeclient, &v1beta1.TaskSpec{})
+			got, err := MakeTaskRunStatus(context.Background(), logger, tr, &c.pod, kubeclient, &v1.TaskSpec{})
 			if err != nil {
 				t.Errorf("MakeTaskRunResult: %s", err)
 			}
@@ -1218,8 +1237,8 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 		desc      string
 		podStatus corev1.PodStatus
 		pod       corev1.Pod
-		taskSpec  v1beta1.TaskSpec
-		want      v1beta1.TaskRunStatus
+		taskSpec  v1.TaskSpec
+		want      v1.TaskRunStatus
 	}{{
 		desc: "test empty result",
 		podStatus: corev1.PodStatus{
@@ -1233,18 +1252,18 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 				},
 			}},
 		},
-		taskSpec: v1beta1.TaskSpec{
-			Results: []v1beta1.TaskResult{
+		taskSpec: v1.TaskSpec{
+			Results: []v1.TaskResult{
 				{
 					Name: "resultName",
-					Type: v1beta1.ResultsTypeString,
+					Type: v1.ResultsTypeString,
 				},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"","type":1}]`,
@@ -1252,16 +1271,16 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					Name:          "bar",
 					ContainerName: "step-bar",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:1234",
 					ResourceName: "source-image",
 				}},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues(""),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues(""),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -1280,18 +1299,18 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 				},
 			}},
 		},
-		taskSpec: v1beta1.TaskSpec{
-			Results: []v1beta1.TaskResult{
+		taskSpec: v1.TaskSpec{
+			Results: []v1.TaskResult{
 				{
 					Name: "resultName",
-					Type: v1beta1.ResultsTypeString,
+					Type: v1.ResultsTypeString,
 				},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"hello","type":1}]`,
@@ -1299,16 +1318,16 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					Name:          "bar",
 					ContainerName: "step-bar",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:1234",
 					ResourceName: "source-image",
 				}},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("hello"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("hello"),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -1327,18 +1346,18 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 				},
 			}},
 		},
-		taskSpec: v1beta1.TaskSpec{
-			Results: []v1beta1.TaskResult{
+		taskSpec: v1.TaskSpec{
+			Results: []v1.TaskResult{
 				{
 					Name: "resultName",
-					Type: v1beta1.ResultsTypeArray,
+					Type: v1.ResultsTypeArray,
 				},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"[\"hello\",\"world\"]","type":1}]`,
@@ -1346,16 +1365,16 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					Name:          "bar",
 					ContainerName: "step-bar",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:1234",
 					ResourceName: "source-image",
 				}},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeArray,
-					Value: *v1beta1.NewStructuredValues("hello", "world"),
+					Type:  v1.ResultsTypeArray,
+					Value: *v1.NewStructuredValues("hello", "world"),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -1374,18 +1393,18 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 				},
 			}},
 		},
-		taskSpec: v1beta1.TaskSpec{
-			Results: []v1beta1.TaskResult{
+		taskSpec: v1.TaskSpec{
+			Results: []v1.TaskResult{
 				{
 					Name: "resultName",
-					Type: v1beta1.ResultsTypeObject,
+					Type: v1.ResultsTypeObject,
 				},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"digest","value":"sha256:1234","resourceName":"source-image"},{"key":"resultName","value":"{\"hello\":\"world\"}","type":1}]`,
@@ -1393,16 +1412,16 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					Name:          "bar",
 					ContainerName: "step-bar",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				ResourcesResult: []v1beta1.PipelineResourceResult{{
+				Sidecars: []v1.SidecarState{},
+				ResourcesResult: []v1.PipelineResourceResult{{
 					Key:          "digest",
 					Value:        "sha256:1234",
 					ResourceName: "source-image",
 				}},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeObject,
-					Value: *v1beta1.NewObject(map[string]string{"hello": "world"}),
+					Type:  v1.ResultsTypeObject,
+					Value: *v1.NewObject(map[string]string{"hello": "world"}),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -1421,22 +1440,22 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 				},
 			}},
 		},
-		taskSpec: v1beta1.TaskSpec{
-			Results: []v1beta1.TaskResult{
+		taskSpec: v1.TaskSpec{
+			Results: []v1.TaskResult{
 				{
 					Name: "resultName",
-					Type: v1beta1.ResultsTypeString,
+					Type: v1.ResultsTypeString,
 				},
 				{
 					Name: "resultName2",
-					Type: v1beta1.ResultsTypeString,
+					Type: v1.ResultsTypeString,
 				},
 			},
 		},
-		want: v1beta1.TaskRunStatus{
+		want: v1.TaskRunStatus{
 			Status: statusSuccess(),
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				Steps: []v1beta1.StepState{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				Steps: []v1.StepState{{
 					ContainerState: corev1.ContainerState{
 						Terminated: &corev1.ContainerStateTerminated{
 							Message: `[{"key":"resultName","value":"{\"hello\":\"world\"}","type":1},{"key":"resultName2","value":"[\"hello\",\"world\"]","type":1}]`,
@@ -1444,15 +1463,15 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 					Name:          "bar",
 					ContainerName: "step-bar",
 				}},
-				Sidecars: []v1beta1.SidecarState{},
-				TaskRunResults: []v1beta1.TaskRunResult{{
+				Sidecars: []v1.SidecarState{},
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "resultName",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("{\"hello\":\"world\"}"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("{\"hello\":\"world\"}"),
 				}, {
 					Name:  "resultName2",
-					Type:  v1beta1.ResultsTypeString,
-					Value: *v1beta1.NewStructuredValues("[\"hello\",\"world\"]"),
+					Type:  v1.ResultsTypeString,
+					Value: *v1.NewStructuredValues("[\"hello\",\"world\"]"),
 				}},
 				// We don't actually care about the time, just that it's not nil
 				CompletionTime: &metav1.Time{Time: time.Now()},
@@ -1473,13 +1492,13 @@ func TestMakeTaskRunStatusAlpha(t *testing.T) {
 			}
 
 			startTime := time.Date(2010, 1, 1, 1, 1, 1, 1, time.UTC)
-			tr := v1beta1.TaskRun{
+			tr := v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "task-run",
 					Namespace: "foo",
 				},
-				Status: v1beta1.TaskRunStatus{
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+				Status: v1.TaskRunStatus{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
 						StartTime: &metav1.Time{Time: startTime},
 					},
 				},
@@ -1560,11 +1579,11 @@ func TestMakeRunStatusJSONError(t *testing.T) {
 			}},
 		},
 	}
-	wantTr := v1beta1.TaskRunStatus{
-		Status: statusFailure(v1beta1.TaskRunReasonFailed.String(), "\"step-non-json\" exited with code 1 (image: \"image\"); for logs run: kubectl -n foo logs pod -c step-non-json\n"),
-		TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+	wantTr := v1.TaskRunStatus{
+		Status: statusFailure(v1.TaskRunReasonFailed.String(), "\"step-non-json\" exited with code 1 (image: \"image\"); for logs run: kubectl -n foo logs pod -c step-non-json\n"),
+		TaskRunStatusFields: v1.TaskRunStatusFields{
 			PodName: "pod",
-			Steps: []v1beta1.StepState{{
+			Steps: []v1.StepState{{
 				ContainerState: corev1.ContainerState{
 					Terminated: &corev1.ContainerStateTerminated{
 						ExitCode: 1,
@@ -1592,12 +1611,12 @@ func TestMakeRunStatusJSONError(t *testing.T) {
 				ContainerName: "step-foo",
 				ImageID:       "image",
 			}},
-			Sidecars: []v1beta1.SidecarState{},
+			Sidecars: []v1.SidecarState{},
 			// We don't actually care about the time, just that it's not nil
 			CompletionTime: &metav1.Time{Time: time.Now()},
 		},
 	}
-	tr := v1beta1.TaskRun{
+	tr := v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      "task-run",
 			Namespace: "foo",
@@ -1606,7 +1625,7 @@ func TestMakeRunStatusJSONError(t *testing.T) {
 
 	logger, _ := logging.NewLogger("", "status")
 	kubeclient := fakek8s.NewSimpleClientset()
-	gotTr, err := MakeTaskRunStatus(context.Background(), logger, tr, pod, kubeclient, &v1beta1.TaskSpec{})
+	gotTr, err := MakeTaskRunStatus(context.Background(), logger, tr, pod, kubeclient, &v1.TaskSpec{})
 	if err == nil {
 		t.Error("Expected error, got nil")
 	}
@@ -1713,13 +1732,13 @@ func TestSidecarsReady(t *testing.T) {
 }
 
 func TestMarkStatusRunning(t *testing.T) {
-	trs := v1beta1.TaskRunStatus{}
-	markStatusRunning(&trs, v1beta1.TaskRunReasonRunning.String(), "Not all Steps in the Task have finished executing")
+	trs := v1.TaskRunStatus{}
+	markStatusRunning(&trs, v1.TaskRunReasonRunning.String(), "Not all Steps in the Task have finished executing")
 
 	expected := &apis.Condition{
 		Type:    apis.ConditionSucceeded,
 		Status:  corev1.ConditionUnknown,
-		Reason:  v1beta1.TaskRunReasonRunning.String(),
+		Reason:  v1.TaskRunReasonRunning.String(),
 		Message: "Not all Steps in the Task have finished executing",
 	}
 
@@ -1729,13 +1748,13 @@ func TestMarkStatusRunning(t *testing.T) {
 }
 
 func TestMarkStatusFailure(t *testing.T) {
-	trs := v1beta1.TaskRunStatus{}
-	markStatusFailure(&trs, v1beta1.TaskRunReasonFailed.String(), "failure message")
+	trs := v1.TaskRunStatus{}
+	markStatusFailure(&trs, v1.TaskRunReasonFailed.String(), "failure message")
 
 	expected := &apis.Condition{
 		Type:    apis.ConditionSucceeded,
 		Status:  corev1.ConditionFalse,
-		Reason:  v1beta1.TaskRunReasonFailed.String(),
+		Reason:  v1.TaskRunReasonFailed.String(),
 		Message: "failure message",
 	}
 
@@ -1745,13 +1764,13 @@ func TestMarkStatusFailure(t *testing.T) {
 }
 
 func TestMarkStatusSuccess(t *testing.T) {
-	trs := v1beta1.TaskRunStatus{}
+	trs := v1.TaskRunStatus{}
 	markStatusSuccess(&trs)
 
 	expected := &apis.Condition{
 		Type:    apis.ConditionSucceeded,
 		Status:  corev1.ConditionTrue,
-		Reason:  v1beta1.TaskRunReasonSuccessful.String(),
+		Reason:  v1.TaskRunReasonSuccessful.String(),
 		Message: "All Steps have completed executing",
 	}
 
@@ -1764,18 +1783,18 @@ func TestIsPodArchived(t *testing.T) {
 	for _, tc := range []struct {
 		name          string
 		podName       string
-		retriesStatus []v1beta1.TaskRunStatus
+		retriesStatus []v1.TaskRunStatus
 		want          bool
 	}{{
 		name:          "Pod is not in the empty retriesStatus",
 		podName:       "pod",
-		retriesStatus: []v1beta1.TaskRunStatus{},
+		retriesStatus: []v1.TaskRunStatus{},
 		want:          false,
 	}, {
 		name:    "Pod is not in the non-empty retriesStatus",
 		podName: "pod-retry1",
-		retriesStatus: []v1beta1.TaskRunStatus{{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+		retriesStatus: []v1.TaskRunStatus{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
 				PodName: "pod",
 			},
 		}},
@@ -1783,16 +1802,16 @@ func TestIsPodArchived(t *testing.T) {
 	}, {
 		name:    "Pod is in the retriesStatus",
 		podName: "pod",
-		retriesStatus: []v1beta1.TaskRunStatus{{
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+		retriesStatus: []v1.TaskRunStatus{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
 				PodName: "pod",
 			}},
 		},
 		want: true,
 	}} {
 		t.Run(tc.name, func(t *testing.T) {
-			trs := v1beta1.TaskRunStatus{
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
+			trs := v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
 					PodName:       "pod",
 					RetriesStatus: tc.retriesStatus,
 				},
@@ -1806,19 +1825,19 @@ func TestIsPodArchived(t *testing.T) {
 }
 
 func statusRunning() duckv1.Status {
-	var trs v1beta1.TaskRunStatus
-	markStatusRunning(&trs, v1beta1.TaskRunReasonRunning.String(), "Not all Steps in the Task have finished executing")
+	var trs v1.TaskRunStatus
+	markStatusRunning(&trs, v1.TaskRunReasonRunning.String(), "Not all Steps in the Task have finished executing")
 	return trs.Status
 }
 
 func statusFailure(reason, message string) duckv1.Status {
-	var trs v1beta1.TaskRunStatus
+	var trs v1.TaskRunStatus
 	markStatusFailure(&trs, reason, message)
 	return trs.Status
 }
 
 func statusSuccess() duckv1.Status {
-	var trs v1beta1.TaskRunStatus
+	var trs v1.TaskRunStatus
 	markStatusSuccess(&trs)
 	return trs.Status
 }

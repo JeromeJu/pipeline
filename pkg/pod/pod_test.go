@@ -29,7 +29,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/names"
 	corev1 "k8s.io/api/core/v1"
@@ -87,11 +87,11 @@ func TestPodBuild(t *testing.T) {
 
 	for _, c := range []struct {
 		desc            string
-		trs             v1beta1.TaskRunSpec
+		trs             v1.TaskRunSpec
 		trAnnotation    map[string]string
-		trStatus        v1beta1.TaskRunStatus
+		trStatus        v1.TaskRunStatus
 		trName          string
-		ts              v1beta1.TaskSpec
+		ts              v1.TaskSpec
 		configDefaults  map[string]string
 		featureFlags    map[string]string
 		want            *corev1.PodSpec
@@ -99,8 +99,8 @@ func TestPodBuild(t *testing.T) {
 		wantPodName     string
 	}{{
 		desc: "simple",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "name",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -108,7 +108,7 @@ func TestPodBuild(t *testing.T) {
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -141,13 +141,13 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "simple with breakpoint onFailure enabled, alpha api fields disabled",
-		trs: v1beta1.TaskRunSpec{
-			Debug: &v1beta1.TaskRunDebug{
+		trs: v1.TaskRunSpec{
+			Debug: &v1.TaskRunDebug{
 				Breakpoint: []string{breakpointOnFailure},
 			},
 		},
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "name",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -155,7 +155,7 @@ func TestPodBuild(t *testing.T) {
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -188,8 +188,8 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "simple with running-in-environment-with-injected-sidecar set to false",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "name",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -200,7 +200,7 @@ func TestPodBuild(t *testing.T) {
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -233,20 +233,20 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "with service account",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "name",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			ServiceAccountName: "service-account",
 		},
 		want: &corev1.PodSpec{
 			ServiceAccountName: "service-account",
 			RestartPolicy:      corev1.RestartPolicyNever,
-			InitContainers:     []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+			InitContainers:     []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -286,14 +286,14 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "with-pod-template",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "name",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			PodTemplate: &pod.Template{
 				SecurityContext: &corev1.PodSecurityContext{
 					Sysctls: []corev1.Sysctl{
@@ -313,7 +313,7 @@ func TestPodBuild(t *testing.T) {
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -361,8 +361,8 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "very long step name",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "a-very-very-long-character-step-name-to-trigger-max-len----and-invalid-characters",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -370,7 +370,7 @@ func TestPodBuild(t *testing.T) {
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "a-very-very-long-character-step-name-to-trigger-max-len----and-invalid-characters"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "a-very-very-long-character-step-name-to-trigger-max-len----and-invalid-characters"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-a-very-very-long-character-step-name-to-trigger-max-len", // step name trimmed.
 				Image:   "image",
@@ -403,8 +403,8 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "step name ends with non alphanumeric",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "ends-with-invalid-%%__$$",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -412,7 +412,7 @@ func TestPodBuild(t *testing.T) {
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "ends-with-invalid-%%__$$"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "ends-with-invalid-%%__$$"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-ends-with-invalid", // invalid suffix removed.
 				Image:   "image",
@@ -445,8 +445,8 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "workingDir in workspace",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:       "name",
 				Image:      "image",
 				Command:    []string{"cmd"}, // avoid entrypoint lookup.
@@ -456,7 +456,7 @@ func TestPodBuild(t *testing.T) {
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			InitContainers: []corev1.Container{
-				entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}}),
+				entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}),
 				{
 					Name:         "working-dir-initializer",
 					Image:        images.WorkingDirInitImage,
@@ -499,13 +499,13 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "sidecar container",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "primary-name",
 				Image:   "primary-image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 			}},
-			Sidecars: []v1beta1.Sidecar{{
+			Sidecars: []v1.Sidecar{{
 				Name:  "sc-name",
 				Image: "sidecar-image",
 			}},
@@ -513,7 +513,7 @@ func TestPodBuild(t *testing.T) {
 		wantAnnotations: map[string]string{},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "primary-name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-primary-name",
 				Image:   "primary-image",
@@ -552,13 +552,13 @@ func TestPodBuild(t *testing.T) {
 		},
 	}, {
 		desc: "sidecar container with script",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "primary-name",
 				Image:   "primary-image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 			}},
-			Sidecars: []v1beta1.Sidecar{{
+			Sidecars: []v1.Sidecar{{
 				Name:   "sc-name",
 				Image:  "sidecar-image",
 				Script: "#!/bin/sh\necho hello from sidecar",
@@ -568,7 +568,7 @@ func TestPodBuild(t *testing.T) {
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			InitContainers: []corev1.Container{
-				entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "primary-name"}}),
+				entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}}),
 				{
 					Name:         "place-scripts",
 					Image:        "busybox",
@@ -620,13 +620,13 @@ _EOF_
 		},
 	}, {
 		desc: "sidecar container with enable-ready-annotation-on-pod-create",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "primary-name",
 				Image:   "primary-image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 			}},
-			Sidecars: []v1beta1.Sidecar{{
+			Sidecars: []v1.Sidecar{{
 				Name:  "sc-name",
 				Image: "sidecar-image",
 			}},
@@ -637,7 +637,7 @@ _EOF_
 		wantAnnotations: map[string]string{}, // no ready annotations on pod create since sidecars are present
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "primary-name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-primary-name",
 				Image:   "primary-image",
@@ -673,8 +673,8 @@ _EOF_
 		},
 	}, {
 		desc: "resource request",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 				Resources: corev1.ResourceRequirements{
@@ -696,7 +696,7 @@ _EOF_
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{
 				{Name: "unnamed-0"},
 				{Name: "unnamed-1"},
 			})},
@@ -769,8 +769,8 @@ _EOF_
 		},
 	}, {
 		desc: "with stepOverrides",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "step1",
 				Image:   "image",
 				Command: []string{"cmd"},
@@ -782,8 +782,8 @@ _EOF_
 				},
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
-			StepOverrides: []v1beta1.TaskRunStepOverride{{
+		trs: v1.TaskRunSpec{
+			StepOverrides: []v1.TaskRunStepOverride{{
 				Name: "step1",
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -795,7 +795,7 @@ _EOF_
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{
 				{Name: "step1"},
 			})},
 			Containers: []corev1.Container{{
@@ -836,8 +836,8 @@ _EOF_
 		},
 	}, {
 		desc: "with stepOverrides and stepTemplate",
-		ts: v1beta1.TaskSpec{
-			StepTemplate: &v1beta1.StepTemplate{
+		ts: v1.TaskSpec{
+			StepTemplate: &v1.StepTemplate{
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("8"),
@@ -845,14 +845,14 @@ _EOF_
 					},
 				},
 			},
-			Steps: []v1beta1.Step{{
+			Steps: []v1.Step{{
 				Name:    "step1",
 				Image:   "image",
 				Command: []string{"cmd"},
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
-			StepOverrides: []v1beta1.TaskRunStepOverride{{
+		trs: v1.TaskRunSpec{
+			StepOverrides: []v1.TaskRunStepOverride{{
 				Name: "step1",
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -864,7 +864,7 @@ _EOF_
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{
 				{Name: "step1"},
 			})},
 			Containers: []corev1.Container{{
@@ -905,13 +905,13 @@ _EOF_
 		},
 	}, {
 		desc: "with sidecarOverrides",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "primary-name",
 				Image:   "primary-image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
 			}},
-			Sidecars: []v1beta1.Sidecar{{
+			Sidecars: []v1.Sidecar{{
 				Name:  "sc-name",
 				Image: "sidecar-image",
 				Resources: corev1.ResourceRequirements{
@@ -922,8 +922,8 @@ _EOF_
 				},
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
-			SidecarOverrides: []v1beta1.TaskRunSidecarOverride{{
+		trs: v1.TaskRunSpec{
+			SidecarOverrides: []v1.TaskRunSidecarOverride{{
 				Name: "sc-name",
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -936,7 +936,7 @@ _EOF_
 		wantAnnotations: map[string]string{},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "primary-name"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "primary-name"}})},
 			Containers: []corev1.Container{{
 				Name:    "step-primary-name",
 				Image:   "primary-image",
@@ -978,12 +978,12 @@ _EOF_
 		},
 	}, {
 		desc: "step with script and stepTemplate",
-		ts: v1beta1.TaskSpec{
-			StepTemplate: &v1beta1.StepTemplate{
+		ts: v1.TaskSpec{
+			StepTemplate: &v1.StepTemplate{
 				Env:  []corev1.EnvVar{{Name: "FOO", Value: "bar"}},
 				Args: []string{"template", "args"},
 			},
-			Steps: []v1beta1.Step{{
+			Steps: []v1.Step{{
 				Name:   "one",
 				Image:  "image",
 				Script: "#!/bin/sh\necho hello from step one",
@@ -1002,7 +1002,7 @@ print("Hello from Python")`,
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
 			InitContainers: []corev1.Container{
-				entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{
+				entrypointInitContainer(images.EntrypointImage, []v1.Step{
 					{Name: "one"},
 					{Name: "two"},
 					{Name: "regular-step"},
@@ -1119,8 +1119,8 @@ _EOF_
 		},
 	}, {
 		desc: "step with script that uses two dollar signs",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:   "one",
 				Image:  "image",
 				Script: "#!/bin/sh\n$$",
@@ -1128,7 +1128,7 @@ _EOF_
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy: corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "one"}}),
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "one"}}),
 				{
 					Name:    "place-scripts",
 					Image:   images.ShellImage,
@@ -1175,8 +1175,8 @@ _EOF_
 		},
 	}, {
 		desc: "using another scheduler",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{
 				{
 					Name:    "schedule-me",
 					Image:   "image",
@@ -1184,14 +1184,14 @@ _EOF_
 				},
 			},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			PodTemplate: &pod.Template{
 				SchedulerName: "there-scheduler",
 			},
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "schedule-me"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "schedule-me"}})},
 			SchedulerName:  "there-scheduler",
 			Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 				Name:         "tekton-creds-init-home-0",
@@ -1226,8 +1226,8 @@ _EOF_
 		},
 	}, {
 		desc: "setting image pull secret",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{
 				{
 					Name:    "image-pull",
 					Image:   "image",
@@ -1235,14 +1235,14 @@ _EOF_
 				},
 			},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			PodTemplate: &pod.Template{
 				ImagePullSecrets: []corev1.LocalObjectReference{{Name: "imageSecret"}},
 			},
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "image-pull"}})},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "image-pull"}})},
 			Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 				Name:         "tekton-creds-init-home-0",
 				VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
@@ -1276,8 +1276,8 @@ _EOF_
 		}},
 		{
 			desc: "setting host aliases",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{
 					{
 						Name:    "host-aliases",
 						Image:   "image",
@@ -1285,14 +1285,14 @@ _EOF_
 					},
 				},
 			},
-			trs: v1beta1.TaskRunSpec{
+			trs: v1.TaskRunSpec{
 				PodTemplate: &pod.Template{
 					HostAliases: []corev1.HostAlias{{IP: "127.0.0.1", Hostnames: []string{"foo.bar"}}},
 				},
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "host-aliases"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "host-aliases"}})},
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
 					VolumeSource: corev1.VolumeSource{EmptyDir: &corev1.EmptyDirVolumeSource{Medium: corev1.StorageMediumMemory}},
@@ -1325,8 +1325,8 @@ _EOF_
 				ActiveDeadlineSeconds: &defaultActiveDeadlineSeconds,
 			}}, {
 			desc: "using hostNetwork",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{
 					{
 						Name:    "use-my-hostNetwork",
 						Image:   "image",
@@ -1334,14 +1334,14 @@ _EOF_
 					},
 				},
 			},
-			trs: v1beta1.TaskRunSpec{
+			trs: v1.TaskRunSpec{
 				PodTemplate: &pod.Template{
 					HostNetwork: true,
 				},
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "use-my-hostNetwork"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-my-hostNetwork"}})},
 				HostNetwork:    true,
 				Volumes: append(implicitVolumes, binVolume, runVolume(0), downwardVolume, corev1.Volume{
 					Name:         "tekton-creds-init-home-0",
@@ -1375,8 +1375,8 @@ _EOF_
 			},
 		}, {
 			desc: "step-with-timeout",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1385,7 +1385,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1420,20 +1420,20 @@ _EOF_
 			},
 		}, {
 			desc: "step-with-no-timeout-equivalent-to-0-second-timeout",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
 					Timeout: &metav1.Duration{Duration: 0 * time.Second},
 				}},
 			},
-			trs: v1beta1.TaskRunSpec{
+			trs: v1.TaskRunSpec{
 				Timeout: &metav1.Duration{Duration: 0 * time.Second},
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1471,8 +1471,8 @@ _EOF_
 			featureFlags: map[string]string{
 				"disable-creds-init": "true",
 			},
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1480,7 +1480,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1507,8 +1507,8 @@ _EOF_
 			},
 		}, {
 			desc: "default-forbidden-env - disallowed via podTemplate.",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1517,7 +1517,7 @@ _EOF_
 				}},
 			},
 			configDefaults: map[string]string{"default-forbidden-env": "FORBIDDEN_ENV, TEST_ENV"},
-			trs: v1beta1.TaskRunSpec{
+			trs: v1.TaskRunSpec{
 				PodTemplate: &pod.Template{
 					Env: []corev1.EnvVar{{Name: "FORBIDDEN_ENV", Value: "overridden_val"},
 						{Name: "TEST_ENV", Value: "new_val"}},
@@ -1525,7 +1525,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1562,15 +1562,15 @@ _EOF_
 			},
 		}, {
 			desc: "override env var using podTemplate",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
 					Env:     []corev1.EnvVar{{Name: "SOME_ENV", Value: "some_val"}},
 				}},
 			},
-			trs: v1beta1.TaskRunSpec{
+			trs: v1.TaskRunSpec{
 				PodTemplate: &pod.Template{
 					Env: []corev1.EnvVar{{Name: "SOME_ENV", Value: "overridden_val"},
 						{Name: "SOME_ENV2", Value: "new_val"}},
@@ -1578,7 +1578,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1617,8 +1617,8 @@ _EOF_
 		}, {
 			desc:         "hermetic env var",
 			featureFlags: map[string]string{"enable-api-fields": "alpha"},
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1629,7 +1629,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1666,8 +1666,8 @@ _EOF_
 		}, {
 			desc:         "override hermetic env var",
 			featureFlags: map[string]string{"enable-api-fields": "alpha"},
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1679,7 +1679,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1717,16 +1717,16 @@ _EOF_
 			},
 		}, {
 			desc: "pod for a taskRun with retries",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
 				}},
 			},
-			trStatus: v1beta1.TaskRunStatus{
-				TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-					RetriesStatus: []v1beta1.TaskRunStatus{{
+			trStatus: v1.TaskRunStatus{
+				TaskRunStatusFields: v1.TaskRunStatusFields{
+					RetriesStatus: []v1.TaskRunStatus{{
 						Status: duckv1.Status{
 							Conditions: []apis.Condition{{
 								Type:   apis.ConditionSucceeded,
@@ -1745,7 +1745,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1779,8 +1779,8 @@ _EOF_
 			wantPodName: fmt.Sprintf("%s-pod-retry2", taskRunName),
 		}, {
 			desc: "long-taskrun-name",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1790,7 +1790,7 @@ _EOF_
 			wantPodName: "task-run-0123456789-01234560d38957287bb0283c59440df14069f59-pod",
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}})},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
 					Image:   "image",
@@ -1823,8 +1823,8 @@ _EOF_
 			},
 		}, {
 			desc: "using TopologySpreadConstraints",
-			ts: v1beta1.TaskSpec{
-				Steps: []v1beta1.Step{
+			ts: v1.TaskSpec{
+				Steps: []v1.Step{
 					{
 						Name:    "use-topologySpreadConstraints",
 						Image:   "image",
@@ -1832,7 +1832,7 @@ _EOF_
 					},
 				},
 			},
-			trs: v1beta1.TaskRunSpec{
+			trs: v1.TaskRunSpec{
 				PodTemplate: &pod.Template{
 					TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
 						{
@@ -1850,7 +1850,7 @@ _EOF_
 			},
 			want: &corev1.PodSpec{
 				RestartPolicy:  corev1.RestartPolicyNever,
-				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "use-topologySpreadConstraints"}})},
+				InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "use-topologySpreadConstraints"}})},
 				TopologySpreadConstraints: []corev1.TopologySpreadConstraint{
 					{
 						MaxSkew:           1,
@@ -1896,12 +1896,12 @@ _EOF_
 		}, {
 			desc:         "sidecar logs enabled",
 			featureFlags: map[string]string{"results-from": "sidecar-logs"},
-			ts: v1beta1.TaskSpec{
-				Results: []v1beta1.TaskResult{{
+			ts: v1.TaskSpec{
+				Results: []v1.TaskResult{{
 					Name: "foo",
-					Type: v1beta1.ResultsTypeString,
+					Type: v1.ResultsTypeString,
 				}},
-				Steps: []v1beta1.Step{{
+				Steps: []v1.Step{{
 					Name:    "name",
 					Image:   "image",
 					Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -1910,7 +1910,7 @@ _EOF_
 			want: &corev1.PodSpec{
 				RestartPolicy: corev1.RestartPolicyNever,
 				InitContainers: []corev1.Container{
-					entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}}),
+					entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}),
 				},
 				Containers: []corev1.Container{{
 					Name:    "step-name",
@@ -2016,7 +2016,7 @@ _EOF_
 			if c.trName != "" {
 				testTaskRunName = c.trName
 			}
-			tr := &v1beta1.TaskRun{
+			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        testTaskRunName,
 					Namespace:   "default",
@@ -2124,20 +2124,20 @@ debug-fail-continue-heredoc-randomly-generated-mz4c7
 
 	for _, c := range []struct {
 		desc            string
-		trs             v1beta1.TaskRunSpec
+		trs             v1.TaskRunSpec
 		trAnnotation    map[string]string
-		ts              v1beta1.TaskSpec
+		ts              v1.TaskSpec
 		want            *corev1.PodSpec
 		wantAnnotations map[string]string
 	}{{
 		desc: "simple with debug breakpoint onFailure",
-		trs: v1beta1.TaskRunSpec{
-			Debug: &v1beta1.TaskRunDebug{
+		trs: v1.TaskRunSpec{
+			Debug: &v1.TaskRunDebug{
 				Breakpoint: []string{breakpointOnFailure},
 			},
 		},
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "name",
 				Image:   "image",
 				Command: []string{"cmd"}, // avoid entrypoint lookup.
@@ -2145,7 +2145,7 @@ debug-fail-continue-heredoc-randomly-generated-mz4c7
 		},
 		want: &corev1.PodSpec{
 			RestartPolicy:  corev1.RestartPolicyNever,
-			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1beta1.Step{{Name: "name"}}), placeScriptsContainer},
+			InitContainers: []corev1.Container{entrypointInitContainer(images.EntrypointImage, []v1.Step{{Name: "name"}}), placeScriptsContainer},
 			Containers: []corev1.Container{{
 				Name:    "step-name",
 				Image:   "image",
@@ -2220,7 +2220,7 @@ debug-fail-continue-heredoc-randomly-generated-mz4c7
 				trAnnotations = c.trAnnotation
 				trAnnotations[ReleaseAnnotation] = fakeVersion
 			}
-			tr := &v1beta1.TaskRun{
+			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:        "taskrun-name",
 					Namespace:   "default",
@@ -2268,13 +2268,13 @@ type ExpectedComputeResources struct {
 func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 	testcases := []struct {
 		desc                     string
-		ts                       v1beta1.TaskSpec
-		trs                      v1beta1.TaskRunSpec
+		ts                       v1.TaskSpec
+		trs                      v1.TaskRunSpec
 		expectedComputeResources []ExpectedComputeResources
 	}{{
 		desc: "overwrite stepTemplate resources requirements",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "1st-step",
 				Image:   "image",
 				Command: []string{"cmd"},
@@ -2283,7 +2283,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 				Image:   "image",
 				Command: []string{"cmd"},
 			}},
-			StepTemplate: &v1beta1.StepTemplate{
+			StepTemplate: &v1.StepTemplate{
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
 						corev1.ResourceCPU:    resource.MustParse("500m"),
@@ -2292,7 +2292,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 				},
 			},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			ComputeResources: &corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("2"),
@@ -2319,8 +2319,8 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 		}},
 	}, {
 		desc: "overwrite step resources requirements",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "1st-step",
 				Image:   "image",
 				Command: []string{"cmd"},
@@ -2342,7 +2342,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 				},
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			ComputeResources: &corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("2"),
@@ -2369,13 +2369,13 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 		}},
 	}, {
 		desc: "with sidecar resource requirements",
-		ts: v1beta1.TaskSpec{
-			Steps: []v1beta1.Step{{
+		ts: v1.TaskSpec{
+			Steps: []v1.Step{{
 				Name:    "1st-step",
 				Image:   "image",
 				Command: []string{"cmd"},
 			}},
-			Sidecars: []v1beta1.Sidecar{{
+			Sidecars: []v1.Sidecar{{
 				Name: "sidecar",
 				Resources: corev1.ResourceRequirements{
 					Requests: corev1.ResourceList{
@@ -2387,7 +2387,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 				},
 			}},
 		},
-		trs: v1beta1.TaskRunSpec{
+		trs: v1.TaskRunSpec{
 			ComputeResources: &corev1.ResourceRequirements{
 				Requests: corev1.ResourceList{
 					corev1.ResourceCPU:    resource.MustParse("2"),
@@ -2435,7 +2435,7 @@ func TestPodBuild_TaskLevelResourceRequirements(t *testing.T) {
 				Images:     images,
 				KubeClient: kubeclient,
 			}
-			tr := &v1beta1.TaskRun{
+			tr := &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "foo-taskrun",
 					Namespace: "default",
@@ -2478,7 +2478,7 @@ func TestMakeLabels(t *testing.T) {
 		"foo":                    "bar",
 		"hello":                  "world",
 	}
-	got := makeLabels(&v1beta1.TaskRun{
+	got := makeLabels(&v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: taskRunName,
 			Labels: map[string]string{
@@ -2493,7 +2493,7 @@ func TestMakeLabels(t *testing.T) {
 }
 
 func TestIsPodReadyImmediately(t *testing.T) {
-	sd := v1beta1.Sidecar{
+	sd := v1.Sidecar{
 		Name: "a-sidecar",
 	}
 
@@ -2507,22 +2507,22 @@ func TestIsPodReadyImmediately(t *testing.T) {
 
 	tcs := []struct {
 		description  string
-		sidecars     []v1beta1.Sidecar
+		sidecars     []v1.Sidecar
 		featureFlags *config.FeatureFlags
 		expected     bool
 	}{{
 		description:  "Default behavior with sidecars present: Pod is not ready on create",
-		sidecars:     []v1beta1.Sidecar{sd},
+		sidecars:     []v1.Sidecar{sd},
 		featureFlags: getFeatureFlags(map[string]string{}),
 		expected:     false,
 	}, {
 		description:  "Default behavior with no sidecars present: Pod is not ready on create",
-		sidecars:     []v1beta1.Sidecar{},
+		sidecars:     []v1.Sidecar{},
 		featureFlags: getFeatureFlags(map[string]string{}),
 		expected:     false,
 	}, {
 		description: "Setting await-sidecar-readiness to true and running-in-environment-with-injected-sidecars to true with sidecars present results in false",
-		sidecars:    []v1beta1.Sidecar{sd},
+		sidecars:    []v1.Sidecar{sd},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "true",
 			featureInjectedSidecar:       "true",
@@ -2530,7 +2530,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: false,
 	}, {
 		description: "Setting await-sidecar-readiness to true and running-in-environment-with-injected-sidecars to true with no sidecars present results in false",
-		sidecars:    []v1beta1.Sidecar{},
+		sidecars:    []v1.Sidecar{},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "true",
 			featureInjectedSidecar:       "true",
@@ -2538,7 +2538,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: false,
 	}, {
 		description: "Setting await-sidecar-readiness to true and running-in-environment-with-injected-sidecars to false with sidecars present results in false",
-		sidecars:    []v1beta1.Sidecar{sd},
+		sidecars:    []v1.Sidecar{sd},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "true",
 			featureInjectedSidecar:       "false",
@@ -2546,7 +2546,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: false,
 	}, {
 		description: "Setting await-sidecar-readiness to true and running-in-environment-with-injected-sidecars to false with no sidecars present results in true",
-		sidecars:    []v1beta1.Sidecar{},
+		sidecars:    []v1.Sidecar{},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "true",
 			featureInjectedSidecar:       "false",
@@ -2554,7 +2554,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: true,
 	}, {
 		description: "Setting await-sidecar-readiness to false and running-in-environment-with-injected-sidecars to true with sidecars present results in true",
-		sidecars:    []v1beta1.Sidecar{sd},
+		sidecars:    []v1.Sidecar{sd},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "false",
 			featureInjectedSidecar:       "true",
@@ -2562,7 +2562,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: true,
 	}, {
 		description: "Setting await-sidecar-readiness to false and running-in-environment-with-injected-sidecars to true with no sidecars present results in true",
-		sidecars:    []v1beta1.Sidecar{},
+		sidecars:    []v1.Sidecar{},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "false",
 			featureInjectedSidecar:       "true",
@@ -2570,7 +2570,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: true,
 	}, {
 		description: "Setting await-sidecar-readiness to false and running-in-environment-with-injected-sidecars to false with sidecars present results in true",
-		sidecars:    []v1beta1.Sidecar{sd},
+		sidecars:    []v1.Sidecar{sd},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "false",
 			featureInjectedSidecar:       "false",
@@ -2578,7 +2578,7 @@ func TestIsPodReadyImmediately(t *testing.T) {
 		expected: true,
 	}, {
 		description: "Setting await-sidecar-readiness to false and running-in-environment-with-injected-sidecars to false with no sidecars present results in true",
-		sidecars:    []v1beta1.Sidecar{},
+		sidecars:    []v1.Sidecar{},
 		featureFlags: getFeatureFlags(map[string]string{
 			featureAwaitSidecarReadiness: "false",
 			featureInjectedSidecar:       "false",
@@ -2598,12 +2598,12 @@ func TestIsPodReadyImmediately(t *testing.T) {
 func TestPrepareInitContainers(t *testing.T) {
 	tcs := []struct {
 		name         string
-		steps        []v1beta1.Step
+		steps        []v1.Step
 		want         corev1.Container
 		featureFlags map[string]string
 	}{{
 		name: "nothing-special",
-		steps: []v1beta1.Step{{
+		steps: []v1.Step{{
 			Name: "foo",
 		}},
 		want: corev1.Container{
@@ -2615,7 +2615,7 @@ func TestPrepareInitContainers(t *testing.T) {
 		},
 	}, {
 		name: "nothing-special-two-steps",
-		steps: []v1beta1.Step{{
+		steps: []v1.Step{{
 			Name: "foo",
 		}, {
 			Name: "bar",

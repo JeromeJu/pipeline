@@ -19,8 +19,8 @@ package resolutionrequest
 import (
 	"context"
 
-	resolutionrequestinformer "github.com/tektoncd/pipeline/pkg/client/resolution/injection/informers/resolution/v1beta1/resolutionrequest"
-	resolutionrequestreconciler "github.com/tektoncd/pipeline/pkg/client/resolution/injection/reconciler/resolution/v1beta1/resolutionrequest"
+	resolutionrequestinformer "github.com/tektoncd/pipeline/pkg/client/resolution/injection/informers/resolution/v1/resolutionrequest"
+	resolutionrequestreconciler "github.com/tektoncd/pipeline/pkg/client/resolution/injection/reconciler/resolution/v1/resolutionrequest"
 	"k8s.io/utils/clock"
 	"knative.dev/pkg/configmap"
 	"knative.dev/pkg/controller"

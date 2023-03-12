@@ -8,7 +8,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/diff"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -30,144 +30,144 @@ var (
 
 var pipelineRunState = PipelineRunState{{
 	TaskRunName: "aTaskRun",
-	TaskRun: &v1beta1.TaskRun{
+	TaskRun: &v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "aTaskRun",
 		},
-		Status: v1beta1.TaskRunStatus{
+		Status: v1.TaskRunStatus{
 			Status: duckv1.Status{
 				Conditions: duckv1.Conditions{successCondition},
 			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				TaskRunResults: []v1beta1.TaskRunResult{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "aResult",
-					Value: *v1beta1.NewStructuredValues("aResultValue"),
+					Value: *v1.NewStructuredValues("aResultValue"),
 				}},
 			},
 		},
 	},
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "aTask",
-		TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+		TaskRef: &v1.TaskRef{Name: "aTask"},
 	},
 }, {
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "bTask",
-		TaskRef: &v1beta1.TaskRef{Name: "bTask"},
-		Params: []v1beta1.Param{{
+		TaskRef: &v1.TaskRef{Name: "bTask"},
+		Params: []v1.Param{{
 			Name:  "bParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
 		}},
 	},
 }, {
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "bTask",
-		TaskRef: &v1beta1.TaskRef{Name: "bTask"},
-		WhenExpressions: []v1beta1.WhenExpression{{
+		TaskRef: &v1.TaskRef{Name: "bTask"},
+		WhenExpressions: []v1.WhenExpression{{
 			Input:    "$(tasks.aTask.results.aResult)",
 			Operator: selection.In,
 			Values:   []string{"$(tasks.aTask.results.aResult)"},
 		}},
 	},
 }, {
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "bTask",
-		TaskRef: &v1beta1.TaskRef{Name: "bTask"},
-		WhenExpressions: []v1beta1.WhenExpression{{
+		TaskRef: &v1.TaskRef{Name: "bTask"},
+		WhenExpressions: []v1.WhenExpression{{
 			Input:    "$(tasks.aTask.results.missingResult)",
 			Operator: selection.In,
 			Values:   []string{"$(tasks.aTask.results.missingResult)"},
 		}},
 	},
 }, {
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "bTask",
-		TaskRef: &v1beta1.TaskRef{Name: "bTask"},
-		Params: []v1beta1.Param{{
+		TaskRef: &v1.TaskRef{Name: "bTask"},
+		Params: []v1.Param{{
 			Name:  "bParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.missingResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.missingResult)"),
 		}},
 	},
 }, {
 	CustomTask:    true,
 	RunObjectName: "aRun",
-	RunObject: &v1beta1.CustomRun{
+	RunObject: &v1.CustomRun{
 		ObjectMeta: metav1.ObjectMeta{Name: "aRun"},
-		Status: v1beta1.CustomRunStatus{
+		Status: v1.CustomRunStatus{
 			Status: duckv1.Status{
 				Conditions: []apis.Condition{successCondition},
 			},
-			CustomRunStatusFields: v1beta1.CustomRunStatusFields{
-				Results: []v1beta1.CustomRunResult{{
+			CustomRunStatusFields: v1.CustomRunStatusFields{
+				Results: []v1.CustomRunResult{{
 					Name:  "aResult",
 					Value: "aResultValue",
 				}},
 			},
 		},
 	},
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "aCustomPipelineTask",
-		TaskRef: &v1beta1.TaskRef{APIVersion: "example.dev/v0", Kind: "Example", Name: "aTask"},
+		TaskRef: &v1.TaskRef{APIVersion: "example.dev/v0", Kind: "Example", Name: "aTask"},
 	},
 }, {
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "bTask",
-		TaskRef: &v1beta1.TaskRef{Name: "bTask"},
-		Params: []v1beta1.Param{{
+		TaskRef: &v1.TaskRef{Name: "bTask"},
+		Params: []v1.Param{{
 			Name:  "bParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aCustomPipelineTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aCustomPipelineTask.results.aResult)"),
 		}},
 	},
 }, {
 	TaskRunName: "cTaskRun",
-	TaskRun: &v1beta1.TaskRun{
+	TaskRun: &v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "cTaskRun",
 		},
-		Status: v1beta1.TaskRunStatus{
+		Status: v1.TaskRunStatus{
 			Status: duckv1.Status{
 				Conditions: duckv1.Conditions{successCondition},
 			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				TaskRunResults: []v1beta1.TaskRunResult{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "cResult",
-					Value: *v1beta1.NewStructuredValues("arrayResultOne", "arrayResultTwo"),
+					Value: *v1.NewStructuredValues("arrayResultOne", "arrayResultTwo"),
 				}},
 			},
 		},
 	},
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "cTask",
-		TaskRef: &v1beta1.TaskRef{Name: "cTask"},
-		Params: []v1beta1.Param{{
+		TaskRef: &v1.TaskRef{Name: "cTask"},
+		Params: []v1.Param{{
 			Name:  "cParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.cTask.results.cResult[1])"),
+			Value: *v1.NewStructuredValues("$(tasks.cTask.results.cResult[1])"),
 		}},
 	},
 }, {
 	TaskRunName: "dTaskRun",
-	TaskRun: &v1beta1.TaskRun{
+	TaskRun: &v1.TaskRun{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "dTaskRun",
 		},
-		Status: v1beta1.TaskRunStatus{
+		Status: v1.TaskRunStatus{
 			Status: duckv1.Status{
 				Conditions: duckv1.Conditions{successCondition},
 			},
-			TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-				TaskRunResults: []v1beta1.TaskRunResult{{
+			TaskRunStatusFields: v1.TaskRunStatusFields{
+				TaskRunResults: []v1.TaskRunResult{{
 					Name:  "dResult",
-					Value: *v1beta1.NewStructuredValues("arrayResultOne", "arrayResultTwo"),
+					Value: *v1.NewStructuredValues("arrayResultOne", "arrayResultTwo"),
 				}},
 			},
 		},
 	},
-	PipelineTask: &v1beta1.PipelineTask{
+	PipelineTask: &v1.PipelineTask{
 		Name:    "dTask",
-		TaskRef: &v1beta1.TaskRef{Name: "dTask"},
-		Params: []v1beta1.Param{{
+		TaskRef: &v1.TaskRef{Name: "dTask"},
+		Params: []v1.Param{{
 			Name:  "dParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.dTask.results.dResult[3])"),
+			Value: *v1.NewStructuredValues("$(tasks.dTask.results.dResult[3])"),
 		}},
 	},
 }}
@@ -176,22 +176,22 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 	for _, tt := range []struct {
 		name             string
 		pipelineRunState PipelineRunState
-		param            v1beta1.Param
+		param            v1.Param
 		want             ResolvedResultRefs
 		wantErr          bool
 	}{{
 		name: "successful resolution: param not using result reference",
 		pipelineRunState: PipelineRunState{{
 			TaskRunName: "aTaskRun",
-			TaskRun:     &v1beta1.TaskRun{ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"}},
-			PipelineTask: &v1beta1.PipelineTask{
+			TaskRun:     &v1.TaskRun{ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"}},
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("explicitValueNoResultReference"),
+			Value: *v1.NewStructuredValues("explicitValueNoResultReference"),
 		},
 		want:    nil,
 		wantErr: false,
@@ -199,32 +199,32 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		name: "successful resolution: using result reference",
 		pipelineRunState: PipelineRunState{{
 			TaskRunName: "aTaskRun",
-			TaskRun: &v1beta1.TaskRun{
+			TaskRun: &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"},
-				Status: v1beta1.TaskRunStatus{
+				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{successCondition},
 					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						TaskRunResults: []v1beta1.TaskRunResult{{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
+						TaskRunResults: []v1.TaskRunResult{{
 							Name:  "aResult",
-							Value: *v1beta1.NewStructuredValues("aResultValue"),
+							Value: *v1.NewStructuredValues("aResultValue"),
 						}},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
@@ -235,59 +235,59 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		name: "successful resolution: using multiple result reference",
 		pipelineRunState: PipelineRunState{{
 			TaskRunName: "aTaskRun",
-			TaskRun: &v1beta1.TaskRun{
+			TaskRun: &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"},
-				Status: v1beta1.TaskRunStatus{
+				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{successCondition},
 					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						TaskRunResults: []v1beta1.TaskRunResult{{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
+						TaskRunResults: []v1.TaskRunResult{{
 							Name:  "aResult",
-							Value: *v1beta1.NewStructuredValues("aResultValue"),
+							Value: *v1.NewStructuredValues("aResultValue"),
 						}},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}, {
 			TaskRunName: "bTaskRun",
-			TaskRun: &v1beta1.TaskRun{
+			TaskRun: &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "bTaskRun"},
-				Status: v1beta1.TaskRunStatus{
+				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{successCondition},
 					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						TaskRunResults: []v1beta1.TaskRunResult{{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
+						TaskRunResults: []v1.TaskRunResult{{
 							Name:  "bResult",
-							Value: *v1beta1.NewStructuredValues("bResultValue"),
+							Value: *v1.NewStructuredValues("bResultValue"),
 						}},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "bTask",
-				TaskRef: &v1beta1.TaskRef{Name: "bTask"},
+				TaskRef: &v1.TaskRef{Name: "bTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult) $(tasks.bTask.results.bResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult) $(tasks.bTask.results.bResult)"),
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
 			FromTaskRun: "aTaskRun",
 		}, {
-			Value: *v1beta1.NewStructuredValues("bResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("bResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "bTask",
 				Result:       "bResult",
 			},
@@ -298,32 +298,32 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		name: "successful resolution: duplicate result references",
 		pipelineRunState: PipelineRunState{{
 			TaskRunName: "aTaskRun",
-			TaskRun: &v1beta1.TaskRun{
+			TaskRun: &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"},
-				Status: v1beta1.TaskRunStatus{
+				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{successCondition},
 					},
-					TaskRunStatusFields: v1beta1.TaskRunStatusFields{
-						TaskRunResults: []v1beta1.TaskRunResult{{
+					TaskRunStatusFields: v1.TaskRunStatusFields{
+						TaskRunResults: []v1.TaskRunResult{{
 							Name:  "aResult",
-							Value: *v1beta1.NewStructuredValues("aResultValue"),
+							Value: *v1.NewStructuredValues("aResultValue"),
 						}},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult) $(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult) $(tasks.aTask.results.aResult)"),
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
@@ -334,45 +334,45 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		name: "unsuccessful resolution: referenced result doesn't exist in referenced task",
 		pipelineRunState: PipelineRunState{{
 			TaskRunName: "aTaskRun",
-			TaskRun: &v1beta1.TaskRun{
+			TaskRun: &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"},
-				Status: v1beta1.TaskRunStatus{
+				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{successCondition},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
 		},
 		want:    nil,
 		wantErr: true,
 	}, {
 		name:             "unsuccessful resolution: pipeline task missing",
 		pipelineRunState: PipelineRunState{},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
 		},
 		want:    nil,
 		wantErr: true,
 	}, {
 		name: "unsuccessful resolution: task run missing",
 		pipelineRunState: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
 		},
 		want:    nil,
 		wantErr: true,
@@ -380,22 +380,22 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		name: "failed resolution: using result reference to a failed task",
 		pipelineRunState: PipelineRunState{{
 			TaskRunName: "aTaskRun",
-			TaskRun: &v1beta1.TaskRun{
+			TaskRun: &v1.TaskRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aTaskRun"},
-				Status: v1beta1.TaskRunStatus{
+				Status: v1.TaskRunStatus{
 					Status: duckv1.Status{
 						Conditions: duckv1.Conditions{failedCondition},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aTask",
-				TaskRef: &v1beta1.TaskRef{Name: "aTask"},
+				TaskRef: &v1.TaskRef{Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aTask.results.aResult)"),
 		},
 		want:    nil,
 		wantErr: true,
@@ -404,32 +404,32 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		pipelineRunState: PipelineRunState{{
 			CustomTask:    true,
 			RunObjectName: "aRun",
-			RunObject: &v1beta1.CustomRun{
+			RunObject: &v1.CustomRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aRun"},
-				Status: v1beta1.CustomRunStatus{
+				Status: v1.CustomRunStatus{
 					Status: duckv1.Status{
 						Conditions: []apis.Condition{successCondition},
 					},
-					CustomRunStatusFields: v1beta1.CustomRunStatusFields{
-						Results: []v1beta1.CustomRunResult{{
+					CustomRunStatusFields: v1.CustomRunStatusFields{
+						Results: []v1.CustomRunResult{{
 							Name:  "aResult",
 							Value: "aResultValue",
 						}},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aCustomPipelineTask",
-				TaskRef: &v1beta1.TaskRef{APIVersion: "example.dev/v0", Kind: "Example", Name: "aTask"},
+				TaskRef: &v1.TaskRef{APIVersion: "example.dev/v0", Kind: "Example", Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aCustomPipelineTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aCustomPipelineTask.results.aResult)"),
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aCustomPipelineTask",
 				Result:       "aResult",
 			},
@@ -441,22 +441,22 @@ func TestTaskParamResolver_ResolveResultRefs(t *testing.T) {
 		pipelineRunState: PipelineRunState{{
 			CustomTask:    true,
 			RunObjectName: "aRun",
-			RunObject: &v1beta1.CustomRun{
+			RunObject: &v1.CustomRun{
 				ObjectMeta: metav1.ObjectMeta{Name: "aRun"},
-				Status: v1beta1.CustomRunStatus{
+				Status: v1.CustomRunStatus{
 					Status: duckv1.Status{
 						Conditions: []apis.Condition{failedCondition},
 					},
 				},
 			},
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:    "aCustomPipelineTask",
-				TaskRef: &v1beta1.TaskRef{APIVersion: "example.dev/v0", Kind: "Example", Name: "aTask"},
+				TaskRef: &v1.TaskRef{APIVersion: "example.dev/v0", Kind: "Example", Name: "aTask"},
 			},
 		}},
-		param: v1beta1.Param{
+		param: v1.Param{
 			Name:  "targetParam",
-			Value: *v1beta1.NewStructuredValues("$(tasks.aCustomPipelineTask.results.aResult)"),
+			Value: *v1.NewStructuredValues("$(tasks.aCustomPipelineTask.results.aResult)"),
 		},
 		want:    nil,
 		wantErr: true,
@@ -520,8 +520,8 @@ func TestResolveResultRefs(t *testing.T) {
 			pipelineRunState[1],
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
@@ -535,8 +535,8 @@ func TestResolveResultRefs(t *testing.T) {
 			pipelineRunState[7],
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("arrayResultOne", "arrayResultTwo"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("arrayResultOne", "arrayResultTwo"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "cTask",
 				Result:       "cResult",
 				ResultsIndex: 1,
@@ -559,8 +559,8 @@ func TestResolveResultRefs(t *testing.T) {
 			pipelineRunState[2],
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
@@ -600,8 +600,8 @@ func TestResolveResultRefs(t *testing.T) {
 			pipelineRunState[6],
 		},
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aCustomPipelineTask",
 				Result:       "aResult",
 			},
@@ -638,8 +638,8 @@ func TestResolveResultRef(t *testing.T) {
 		pipelineRunState: pipelineRunState,
 		target:           pipelineRunState[1],
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
@@ -651,8 +651,8 @@ func TestResolveResultRef(t *testing.T) {
 		pipelineRunState: pipelineRunState,
 		target:           pipelineRunState[2],
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aTask",
 				Result:       "aResult",
 			},
@@ -684,8 +684,8 @@ func TestResolveResultRef(t *testing.T) {
 		pipelineRunState: pipelineRunState,
 		target:           pipelineRunState[6],
 		want: ResolvedResultRefs{{
-			Value: *v1beta1.NewStructuredValues("aResultValue"),
-			ResultReference: v1beta1.ResultRef{
+			Value: *v1.NewStructuredValues("aResultValue"),
+			ResultReference: v1.ResultRef{
 				PipelineTask: "aCustomPipelineTask",
 				Result:       "aResult",
 			},

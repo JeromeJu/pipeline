@@ -21,8 +21,8 @@ import (
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
-	customruninformer "github.com/tektoncd/pipeline/pkg/client/injection/informers/pipeline/v1beta1/customrun"
-	customrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/customrun"
+	customruninformer "github.com/tektoncd/pipeline/pkg/client/injection/informers/pipeline/v1/customrun"
+	customrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/customrun"
 	cacheclient "github.com/tektoncd/pipeline/pkg/reconciler/events/cache"
 	cloudeventclient "github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	"knative.dev/pkg/configmap"

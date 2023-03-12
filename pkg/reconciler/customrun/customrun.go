@@ -21,8 +21,8 @@ import (
 
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
-	customrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1beta1/customrun"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+	customrunreconciler "github.com/tektoncd/pipeline/pkg/client/injection/reconciler/pipeline/v1/customrun"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cache"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
@@ -46,7 +46,7 @@ var (
 // ReconcileKind compares the actual state with the desired, and attempts to
 // converge the two. It then updates the Status block of the CustomRun
 // resource with the current status of the resource.
-func (c *Reconciler) ReconcileKind(ctx context.Context, customRun *v1beta1.CustomRun) pkgreconciler.Event {
+func (c *Reconciler) ReconcileKind(ctx context.Context, customRun *v1.CustomRun) pkgreconciler.Event {
 	logger := logging.FromContext(ctx)
 	configs := config.FromContextOrDefaults(ctx)
 	ctx = cloudevent.ToContext(ctx, c.cloudEventClient)

@@ -24,7 +24,7 @@ import (
 	"github.com/tektoncd/pipeline/pkg/apis/config"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/pod"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/workspace"
 	"github.com/tektoncd/pipeline/test/diff"
 	"github.com/tektoncd/pipeline/test/parse"
@@ -51,13 +51,13 @@ func TestCreateAndDeleteOfAffinityAssistant(t *testing.T) {
 
 	workspaceName := "testws"
 	pipelineRunName := "pipelinerun-1"
-	testPipelineRun := &v1beta1.PipelineRun{
+	testPipelineRun := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: pipelineRunName,
 		},
-		Spec: v1beta1.PipelineRunSpec{
-			Workspaces: []v1beta1.WorkspaceBinding{{
+		Spec: v1.PipelineRunSpec{
+			Workspaces: []v1.WorkspaceBinding{{
 				Name: workspaceName,
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: "myclaim",
@@ -89,12 +89,12 @@ func TestCreateAndDeleteOfAffinityAssistant(t *testing.T) {
 }
 
 func TestPipelineRunPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
-	prWithCustomPodTemplate := &v1beta1.PipelineRun{
+	prWithCustomPodTemplate := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pipelinerun-with-custom-podtemplate",
 		},
-		Spec: v1beta1.PipelineRunSpec{
+		Spec: v1.PipelineRunSpec{
 			PodTemplate: &pod.Template{
 				Tolerations: []corev1.Toleration{{
 					Key:      "key",
@@ -128,7 +128,7 @@ func TestPipelineRunPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 }
 
 func TestDefaultPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
-	prWithCustomPodTemplate := &v1beta1.PipelineRun{
+	prWithCustomPodTemplate := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pipelinerun-with-custom-podtemplate",
@@ -166,12 +166,12 @@ func TestDefaultPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 }
 
 func TestMergedPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
-	prWithCustomPodTemplate := &v1beta1.PipelineRun{
+	prWithCustomPodTemplate := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pipelinerun-with-custom-podtemplate",
 		},
-		Spec: v1beta1.PipelineRunSpec{
+		Spec: v1.PipelineRunSpec{
 			PodTemplate: &pod.Template{
 				Tolerations: []corev1.Toleration{{
 					Key:      "key",
@@ -212,12 +212,12 @@ func TestMergedPodTemplatesArePropagatedToAffinityAssistant(t *testing.T) {
 }
 
 func TestOnlySelectPodTemplateFieldsArePropagatedToAffinityAssistant(t *testing.T) {
-	prWithCustomPodTemplate := &v1beta1.PipelineRun{
+	prWithCustomPodTemplate := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pipelinerun-with-custom-podtemplate",
 		},
-		Spec: v1beta1.PipelineRunSpec{
+		Spec: v1.PipelineRunSpec{
 			PodTemplate: &pod.Template{
 				Tolerations: []corev1.Toleration{{
 					Key:      "key",
@@ -245,12 +245,12 @@ func TestOnlySelectPodTemplateFieldsArePropagatedToAffinityAssistant(t *testing.
 }
 
 func TestThatTheAffinityAssistantIsWithoutNodeSelectorAndTolerations(t *testing.T) {
-	prWithoutCustomPodTemplate := &v1beta1.PipelineRun{
+	prWithoutCustomPodTemplate := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "pipelinerun-without-custom-podtemplate",
 		},
-		Spec: v1beta1.PipelineRunSpec{},
+		Spec: v1.PipelineRunSpec{},
 	}
 
 	stsWithoutTolerationsAndNodeSelector := affinityAssistantStatefulSet("test-assistant", prWithoutCustomPodTemplate, "mypvc", "nginx", nil)
@@ -284,13 +284,13 @@ func TestThatAffinityAssistantNameIsNoLongerThan53(t *testing.T) {
 // cleanup of Affinity Assistants is omitted when the
 // Affinity Assistant is disabled
 func TestThatCleanupIsAvoidedIfAssistantIsDisabled(t *testing.T) {
-	testPipelineRun := &v1beta1.PipelineRun{
+	testPipelineRun := &v1.PipelineRun{
 		TypeMeta: metav1.TypeMeta{Kind: "PipelineRun"},
 		ObjectMeta: metav1.ObjectMeta{
 			Name: "test-pipelinerun",
 		},
-		Spec: v1beta1.PipelineRunSpec{
-			Workspaces: []v1beta1.WorkspaceBinding{{
+		Spec: v1.PipelineRunSpec{
+			Workspaces: []v1.WorkspaceBinding{{
 				Name: "test-workspace",
 				PersistentVolumeClaim: &corev1.PersistentVolumeClaimVolumeSource{
 					ClaimName: "myclaim",
@@ -384,7 +384,7 @@ func TestGetAssistantAffinityMergedWithPodTemplateAffinity(t *testing.T) {
 		},
 	}
 
-	prWithEmptyAffinityPodTemplate := parse.MustParseV1beta1PipelineRun(t, `
+	prWithEmptyAffinityPodTemplate := parse.MustParsev1PipelineRun(t, `
 metadata:
   name: pr-with-no-podTemplate
 `)
@@ -396,7 +396,7 @@ metadata:
 		},
 	}
 
-	prWithPodTemplatePodAffinity := parse.MustParseV1beta1PipelineRun(t, `
+	prWithPodTemplatePodAffinity := parse.MustParsev1PipelineRun(t, `
 metadata:
   name: pr-with-podTemplate-podAffinity
 spec:
@@ -445,7 +445,7 @@ spec:
 		},
 	}
 
-	prWithPodTemplateNodeAffinity := parse.MustParseV1beta1PipelineRun(t, `
+	prWithPodTemplateNodeAffinity := parse.MustParsev1PipelineRun(t, `
 metadata:
   name: pr-with-podTemplate-nodeAffinity
 spec:
@@ -487,7 +487,7 @@ spec:
 
 	for _, tc := range []struct {
 		description string
-		pr          *v1beta1.PipelineRun
+		pr          *v1.PipelineRun
 		expect      *corev1.Affinity
 	}{
 		{

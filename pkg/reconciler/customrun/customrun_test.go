@@ -24,7 +24,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cloudevent"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
 	"github.com/tektoncd/pipeline/test"
@@ -70,7 +70,7 @@ func initializeCustomRunControllerAssets(t *testing.T, d test.Data) (test.Assets
 	}, cancel
 }
 
-func getCustomRunName(customRun v1beta1.CustomRun) string {
+func getCustomRunName(customRun v1.CustomRun) string {
 	return strings.Join([]string{customRun.Namespace, customRun.Name}, "/")
 }
 
@@ -85,7 +85,7 @@ func getCustomRunController(t *testing.T, d test.Data) (test.Assets, func()) {
 // TestReconcile_CloudEvents runs reconcile with a cloud event sink configured
 // to ensure that events are sent in different cases
 func TestReconcile_CloudEvents(t *testing.T) {
-	ignoreResourceVersion := cmpopts.IgnoreFields(v1beta1.CustomRun{}, "ObjectMeta.ResourceVersion")
+	ignoreResourceVersion := cmpopts.IgnoreFields(v1.CustomRun{}, "ObjectMeta.ResourceVersion")
 
 	cms := []*corev1.ConfigMap{
 		{
@@ -113,7 +113,7 @@ func TestReconcile_CloudEvents(t *testing.T) {
 		condition: &apis.Condition{
 			Type:   apis.ConditionSucceeded,
 			Status: corev1.ConditionUnknown,
-			Reason: v1beta1.CustomRunReasonRunning.String(),
+			Reason: v1.CustomRunReasonRunning.String(),
 		},
 		wantCloudEvents: []string{`(?s)dev.tekton.event.customrun.running.v1.*test-customRun`},
 	}, {
@@ -121,7 +121,7 @@ func TestReconcile_CloudEvents(t *testing.T) {
 		condition: &apis.Condition{
 			Type:   apis.ConditionSucceeded,
 			Status: corev1.ConditionTrue,
-			Reason: v1beta1.CustomRunReasonSuccessful.String(),
+			Reason: v1.CustomRunReasonSuccessful.String(),
 		},
 		wantCloudEvents: []string{`(?s)dev.tekton.event.customrun.successful.v1.*test-customRun`},
 	}, {
@@ -129,7 +129,7 @@ func TestReconcile_CloudEvents(t *testing.T) {
 		condition: &apis.Condition{
 			Type:   apis.ConditionSucceeded,
 			Status: corev1.ConditionFalse,
-			Reason: v1beta1.CustomRunReasonCancelled.String(),
+			Reason: v1.CustomRunReasonCancelled.String(),
 		},
 		wantCloudEvents: []string{`(?s)dev.tekton.event.customrun.failed.v1.*test-customRun`},
 	}}
@@ -139,22 +139,22 @@ func TestReconcile_CloudEvents(t *testing.T) {
 			objectStatus := duckv1.Status{
 				Conditions: []apis.Condition{},
 			}
-			crStatusFields := v1beta1.CustomRunStatusFields{}
+			crStatusFields := v1.CustomRunStatusFields{}
 			if tc.condition != nil {
 				objectStatus.Conditions = append(objectStatus.Conditions, *tc.condition)
 			}
-			customRun := v1beta1.CustomRun{
+			customRun := v1.CustomRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-customRun",
 					Namespace: "foo",
 				},
-				Spec: v1beta1.CustomRunSpec{},
-				Status: v1beta1.CustomRunStatus{
+				Spec: v1.CustomRunSpec{},
+				Status: v1.CustomRunStatus{
 					Status:                objectStatus,
 					CustomRunStatusFields: crStatusFields,
 				},
 			}
-			customRuns := []*v1beta1.CustomRun{&customRun}
+			customRuns := []*v1.CustomRun{&customRun}
 
 			d := test.Data{
 				CustomRuns:              customRuns,
@@ -177,7 +177,7 @@ func TestReconcile_CloudEvents(t *testing.T) {
 				}
 			}
 
-			updatedCR, err := clients.Pipeline.TektonV1beta1().CustomRuns(customRun.Namespace).Get(testAssets.Ctx, customRun.Name, metav1.GetOptions{})
+			updatedCR, err := clients.Pipeline.Tektonv1().CustomRuns(customRun.Namespace).Get(testAssets.Ctx, customRun.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("getting updated customRun: %v", err)
 			}
@@ -244,23 +244,23 @@ func TestReconcile_CloudEvents_Disabled(t *testing.T) {
 					{
 						Type:   apis.ConditionSucceeded,
 						Status: corev1.ConditionFalse,
-						Reason: v1beta1.CustomRunReasonCancelled.String(),
+						Reason: v1.CustomRunReasonCancelled.String(),
 					},
 				},
 			}
-			crStatusFields := v1beta1.CustomRunStatusFields{}
-			customRun := v1beta1.CustomRun{
+			crStatusFields := v1.CustomRunStatusFields{}
+			customRun := v1.CustomRun{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-customRun",
 					Namespace: "foo",
 				},
-				Spec: v1beta1.CustomRunSpec{},
-				Status: v1beta1.CustomRunStatus{
+				Spec: v1.CustomRunSpec{},
+				Status: v1.CustomRunStatus{
 					Status:                objectStatus,
 					CustomRunStatusFields: crStatusFields,
 				},
 			}
-			customRuns := []*v1beta1.CustomRun{&customRun}
+			customRuns := []*v1.CustomRun{&customRun}
 
 			d := test.Data{
 				CustomRuns: customRuns,
@@ -278,7 +278,7 @@ func TestReconcile_CloudEvents_Disabled(t *testing.T) {
 				t.Errorf("Expected actions to be logged in the kubeclient, got none")
 			}
 
-			updatedCR, err := clients.Pipeline.TektonV1beta1().CustomRuns(customRun.Namespace).Get(testAssets.Ctx, customRun.Name, metav1.GetOptions{})
+			updatedCR, err := clients.Pipeline.Tektonv1().CustomRuns(customRun.Namespace).Get(testAssets.Ctx, customRun.Name, metav1.GetOptions{})
 			if err != nil {
 				t.Fatalf("getting updated customRun: %v", err)
 			}

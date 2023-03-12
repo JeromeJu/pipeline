@@ -24,8 +24,8 @@ import (
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 	lru "github.com/hashicorp/golang-lru"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/events/cache"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -97,7 +97,7 @@ func SendCloudEventWithRetries(ctx context.Context, object runtime.Object) error
 	}
 	// Events for Runs require a cache of events that have been sent
 	_, isRun := object.(*v1alpha1.Run)
-	_, isCustomRun := object.(*v1beta1.CustomRun)
+	_, isCustomRun := object.(*v1.CustomRun)
 	if isRun || isCustomRun {
 		cacheClient = cache.Get(ctx)
 	}

@@ -26,8 +26,8 @@ import (
 	cetypes "github.com/cloudevents/sdk-go/v2/types"
 	"github.com/google/go-cmp/cmp"
 	lru "github.com/hashicorp/golang-lru"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/test/diff"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -39,7 +39,7 @@ func getEventData(run interface{}) map[string]interface{} {
 	if v, ok := run.(*v1alpha1.Run); ok {
 		cloudEventData["run"] = v
 	}
-	if v, ok := run.(*v1beta1.CustomRun); ok {
+	if v, ok := run.(*v1.CustomRun); ok {
 		cloudEventData["customRun"] = v
 	}
 	return cloudEventData
@@ -76,18 +76,18 @@ func getRunByMeta(name string, namespace string) *v1alpha1.Run {
 	}
 }
 
-func getCustomRunByMeta(name string, namespace string) *v1beta1.CustomRun {
-	return &v1beta1.CustomRun{
+func getCustomRunByMeta(name string, namespace string) *v1.CustomRun {
+	return &v1.CustomRun{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CustomRun",
-			APIVersion: "v1beta1",
+			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,
 			Namespace: namespace,
 		},
-		Spec:   v1beta1.CustomRunSpec{},
-		Status: v1beta1.CustomRunStatus{},
+		Spec:   v1.CustomRunSpec{},
+		Status: v1.CustomRunStatus{},
 	}
 }
 

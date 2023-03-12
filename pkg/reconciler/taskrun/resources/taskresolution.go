@@ -1,5 +1,5 @@
 /*
-Copyright 2022 The Tekton Authors
+Copyright 2019 The Tekton Authors
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
@@ -14,16 +14,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resolution
+package resources
 
 import (
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// ResolvedObjectMeta contains both ObjectMeta and the metadata that identifies the source where the resource came from.
-type ResolvedObjectMeta struct {
-	*metav1.ObjectMeta `json:",omitempty"`
-	// ConfigSource identifies where the spec came from.
-	ConfigSource *v1.ConfigSource `json:",omitempty"`
+// ResolvedTask contains all the data that is needed to execute
+// the TaskRun: the TaskRun, it's Task and the PipelineResources it needs.
+type ResolvedTask struct {
+	TaskName string
+	Kind     v1.TaskKind
+	TaskSpec *v1.TaskSpec
 }
