@@ -80,7 +80,7 @@ func getCustomRunByMeta(name string, namespace string) *v1beta1.CustomRun {
 	return &v1beta1.CustomRun{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "CustomRun",
-			APIVersion: "v1beta1",
+			APIVersion: "v1",
 		},
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      name,

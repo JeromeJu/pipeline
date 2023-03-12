@@ -27,8 +27,8 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"github.com/sigstore/sigstore/pkg/signature"
 	"github.com/tektoncd/pipeline/pkg/apis/config"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/trustedresources/verifier"
 	test "github.com/tektoncd/pipeline/test"
 	"github.com/tektoncd/pipeline/test/diff"
@@ -87,7 +87,7 @@ func TestVerifyInterface_Task_Error(t *testing.T) {
 
 	tcs := []struct {
 		name          string
-		task          *v1beta1.Task
+		task          *v1.Task
 		expectedError error
 	}{{
 		name:          "Unsigned Task Fail Verification",
@@ -124,6 +124,78 @@ func TestVerifyInterface_Task_Error(t *testing.T) {
 	}
 }
 
+<<<<<<< Updated upstream
+=======
+func TestVerifyTask_Configmap_Success(t *testing.T) {
+	ctx := logging.WithLogger(context.Background(), zaptest.NewLogger(t).Sugar())
+
+	signer, keypath := test.GetSignerFromFile(ctx, t)
+
+	ctx = test.SetupTrustedResourceKeyConfig(ctx, keypath, config.EnforceResourceVerificationMode)
+
+	unsignedTask := test.GetUnsignedTask("test-task")
+
+	signedTask, err := test.GetSignedTask(unsignedTask, signer, "signed")
+	if err != nil {
+		t.Fatal("fail to sign task", err)
+	}
+
+	err = VerifyTask(ctx, signedTask, nil, "", []*v1alpha1.VerificationPolicy{})
+	if err != nil {
+		t.Errorf("VerifyTask() get err %v", err)
+	}
+}
+
+func TestVerifyTask_Configmap_Error(t *testing.T) {
+	ctx := logging.WithLogger(context.Background(), zaptest.NewLogger(t).Sugar())
+
+	signer, keypath := test.GetSignerFromFile(ctx, t)
+
+	unsignedTask := test.GetUnsignedTask("test-task")
+
+	signedTask, err := test.GetSignedTask(unsignedTask, signer, "signed")
+	if err != nil {
+		t.Fatal("fail to sign task", err)
+	}
+
+	tamperedTask := signedTask.DeepCopy()
+	tamperedTask.Annotations["random"] = "attack"
+
+	tcs := []struct {
+		name          string
+		task          v1.TaskObject
+		keypath       string
+		expectedError error
+	}{{
+		name:          "modified Task fails verification",
+		task:          tamperedTask,
+		keypath:       keypath,
+		expectedError: ErrorResourceVerificationFailed,
+	}, {
+		name:          "unsigned Task fails verification",
+		task:          unsignedTask,
+		keypath:       keypath,
+		expectedError: ErrorSignatureMissing,
+	}, {
+		name:          "fail to load key from configmap",
+		task:          signedTask,
+		keypath:       "wrongPath",
+		expectedError: verifier.ErrorFailedLoadKeyFile,
+	},
+	}
+
+	for _, tc := range tcs {
+		t.Run(tc.name, func(t *testing.T) {
+			ctx = test.SetupTrustedResourceKeyConfig(ctx, tc.keypath, config.EnforceResourceVerificationMode)
+			err := VerifyTask(ctx, tc.task, nil, "", []*v1alpha1.VerificationPolicy{})
+			if !errors.Is(err, tc.expectedError) {
+				t.Errorf("VerifyTask got: %v, want: %v", err, tc.expectedError)
+			}
+		})
+	}
+}
+
+>>>>>>> Stashed changes
 func TestVerifyTask_VerificationPolicy_Success(t *testing.T) {
 	ctx := logging.WithLogger(context.Background(), zaptest.NewLogger(t).Sugar())
 	ctx = test.SetupTrustedResourceConfig(ctx, config.EnforceResourceVerificationMode)
@@ -174,7 +246,7 @@ func TestVerifyTask_VerificationPolicy_Success(t *testing.T) {
 
 	tcs := []struct {
 		name   string
-		task   v1beta1.TaskObject
+		task   v1.TaskObject
 		source string
 		signer signature.SignerVerifier
 	}{{
@@ -218,7 +290,7 @@ func TestVerifyTask_VerificationPolicy_Error(t *testing.T) {
 
 	tcs := []struct {
 		name               string
-		task               v1beta1.TaskObject
+		task               v1.TaskObject
 		source             string
 		verificationPolicy []*v1alpha1.VerificationPolicy
 		expectedError      error
@@ -307,7 +379,7 @@ func TestVerifyPipeline_Success(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		pipeline v1beta1.PipelineObject
+		pipeline v1.PipelineObject
 		source   string
 	}{{
 		name:     "Signed git source Task Passes Verification",
@@ -344,7 +416,7 @@ func TestVerifyPipeline_Error(t *testing.T) {
 
 	tcs := []struct {
 		name     string
-		pipeline v1beta1.PipelineObject
+		pipeline v1.PipelineObject
 		source   string
 	}{{
 		name:     "Tampered Task Fails Verification with tampered content",

@@ -20,7 +20,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/pkg/reconciler/taskrun/resources"
 	"k8s.io/apimachinery/pkg/selection"
 )
@@ -34,75 +34,75 @@ func TestValidatePipelineTaskResults_ValidStates(t *testing.T) {
 	}{{
 		desc: "no variables used",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
-				Params: []v1beta1.Param{{
+				Params: []v1.Param{{
 					Name:  "p1",
-					Value: *v1beta1.NewStructuredValues("foo"),
+					Value: *v1.NewStructuredValues("foo"),
 				}},
 			},
 		}},
 	}, {
 		desc: "correct use of task and result names",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
 			},
 			ResolvedTask: &resources.ResolvedTask{
 				TaskName: "t",
-				TaskSpec: &v1beta1.TaskSpec{
-					Results: []v1beta1.TaskResult{{
+				TaskSpec: &v1.TaskSpec{
+					Results: []v1.TaskResult{{
 						Name: "result",
 					}},
 				},
 			},
 		}, {
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt2",
-				Params: []v1beta1.Param{{
+				Params: []v1.Param{{
 					Name:  "p",
-					Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result)"),
+					Value: *v1.NewStructuredValues("$(tasks.pt1.results.result)"),
 				}},
 			},
 		}},
 	}, {
 		desc: "correct use of task and result names in matrix",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
 			},
 			ResolvedTask: &resources.ResolvedTask{
 				TaskName: "t",
-				TaskSpec: &v1beta1.TaskSpec{
-					Results: []v1beta1.TaskResult{{
+				TaskSpec: &v1.TaskSpec{
+					Results: []v1.TaskResult{{
 						Name: "result",
 					}},
 				},
 			},
 		}, {
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt2",
-				Matrix: &v1beta1.Matrix{
-					Params: []v1beta1.Param{{
+				Matrix: &v1.Matrix{
+					Params: []v1.Param{{
 						Name:  "p",
-						Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result)", "foo"),
+						Value: *v1.NewStructuredValues("$(tasks.pt1.results.result)", "foo"),
 					}}},
 			},
 		}},
 	}, {
 		desc: "custom task results are not validated",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
 			},
 			CustomTask:    true,
 			RunObjectName: "foo-run",
 		}, {
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt2",
-				Params: []v1beta1.Param{{
+				Params: []v1.Param{{
 					Name:  "p",
-					Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.a-dynamic-custom-task-result)"),
+					Value: *v1.NewStructuredValues("$(tasks.pt1.results.a-dynamic-custom-task-result)"),
 				}},
 			},
 		}},
@@ -125,31 +125,31 @@ func TestValidatePipelineTaskResults_IncorrectTaskName(t *testing.T) {
 	}{{
 		desc: "invalid result reference in param",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
-				Params: []v1beta1.Param{{
+				Params: []v1.Param{{
 					Name:  "p1",
-					Value: *v1beta1.NewStructuredValues(missingPipelineTaskVariable),
+					Value: *v1.NewStructuredValues(missingPipelineTaskVariable),
 				}},
 			},
 		}},
 	}, {
 		desc: "invalid result reference in matrix",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
-				Params: []v1beta1.Param{{
+				Params: []v1.Param{{
 					Name:  "p1",
-					Value: *v1beta1.NewStructuredValues(missingPipelineTaskVariable, "foo"),
+					Value: *v1.NewStructuredValues(missingPipelineTaskVariable, "foo"),
 				}},
 			},
 		}},
 	}, {
 		desc: "invalid result reference in when expression",
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
-				WhenExpressions: []v1beta1.WhenExpression{{
+				When: []v1.WhenExpression{{
 					Input:    "foo",
 					Operator: selection.In,
 					Values: []string{
@@ -172,13 +172,13 @@ func TestValidatePipelineTaskResults_IncorrectTaskName(t *testing.T) {
 // a misnamed Result is correctly caught by the validatePipelineTaskResults func.
 func TestValidatePipelineTaskResults_IncorrectResultName(t *testing.T) {
 	pt1 := &ResolvedPipelineTask{
-		PipelineTask: &v1beta1.PipelineTask{
+		PipelineTask: &v1.PipelineTask{
 			Name: "pt1",
 		},
 		ResolvedTask: &resources.ResolvedTask{
 			TaskName: "t",
-			TaskSpec: &v1beta1.TaskSpec{
-				Results: []v1beta1.TaskResult{{
+			TaskSpec: &v1.TaskSpec{
+				Results: []v1.TaskResult{{
 					Name: "not-the-result-youre-looking-for",
 				}},
 			},
@@ -190,32 +190,32 @@ func TestValidatePipelineTaskResults_IncorrectResultName(t *testing.T) {
 	}{{
 		desc: "invalid result reference in param",
 		state: PipelineRunState{pt1, {
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt2",
-				Params: []v1beta1.Param{{
+				Params: []v1.Param{{
 					Name:  "p1",
-					Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result1)"),
+					Value: *v1.NewStructuredValues("$(tasks.pt1.results.result1)"),
 				}},
 			},
 		}},
 	}, {
 		desc: "invalid result reference in matrix",
 		state: PipelineRunState{pt1, {
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt2",
-				Matrix: &v1beta1.Matrix{
-					Params: []v1beta1.Param{{
+				Matrix: &v1.Matrix{
+					Params: []v1.Param{{
 						Name:  "p1",
-						Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result1)", "$(tasks.pt1.results.result2)"),
+						Value: *v1.NewStructuredValues("$(tasks.pt1.results.result1)", "$(tasks.pt1.results.result2)"),
 					}}},
 			},
 		}},
 	}, {
 		desc: "invalid result reference in when expression",
 		state: PipelineRunState{pt1, {
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt2",
-				WhenExpressions: []v1beta1.WhenExpression{{
+				When: []v1.WhenExpression{{
 					Input:    "foo",
 					Operator: selection.In,
 					Values: []string{
@@ -238,7 +238,7 @@ func TestValidatePipelineTaskResults_IncorrectResultName(t *testing.T) {
 // with a name but no spec results in a validation error being returned.
 func TestValidatePipelineTaskResults_MissingTaskSpec(t *testing.T) {
 	pt1 := &ResolvedPipelineTask{
-		PipelineTask: &v1beta1.PipelineTask{
+		PipelineTask: &v1.PipelineTask{
 			Name: "pt1",
 		},
 		ResolvedTask: &resources.ResolvedTask{
@@ -247,20 +247,20 @@ func TestValidatePipelineTaskResults_MissingTaskSpec(t *testing.T) {
 		},
 	}
 	state := PipelineRunState{pt1, {
-		PipelineTask: &v1beta1.PipelineTask{
+		PipelineTask: &v1.PipelineTask{
 			Name: "pt2",
-			Params: []v1beta1.Param{{
+			Params: []v1.Param{{
 				Name:  "p1",
-				Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result1)"),
+				Value: *v1.NewStructuredValues("$(tasks.pt1.results.result1)"),
 			}},
 		},
 	}, {
-		PipelineTask: &v1beta1.PipelineTask{
+		PipelineTask: &v1.PipelineTask{
 			Name: "pt3",
-			Matrix: &v1beta1.Matrix{
-				Params: []v1beta1.Param{{
+			Matrix: &v1.Matrix{
+				Params: []v1.Param{{
 					Name:  "p1",
-					Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result1)", "$(tasks.pt1.results.result2)"),
+					Value: *v1.NewStructuredValues("$(tasks.pt1.results.result1)", "$(tasks.pt1.results.result2)"),
 				}}},
 		},
 	}}
@@ -275,33 +275,33 @@ func TestValidatePipelineTaskResults_MissingTaskSpec(t *testing.T) {
 func TestValidatePipelineResults_ValidStates(t *testing.T) {
 	for _, tc := range []struct {
 		desc  string
-		spec  *v1beta1.PipelineSpec
+		spec  *v1.PipelineSpec
 		state PipelineRunState
 	}{{
 		desc: "no result variables",
-		spec: &v1beta1.PipelineSpec{
-			Results: []v1beta1.PipelineResult{{
+		spec: &v1.PipelineSpec{
+			Results: []v1.PipelineResult{{
 				Name:  "foo-result",
-				Value: *v1beta1.NewStructuredValues("just a text pipeline result"),
+				Value: *v1.NewStructuredValues("just a text pipeline result"),
 			}},
 		},
 		state: nil,
 	}, {
 		desc: "correct use of task and result names",
-		spec: &v1beta1.PipelineSpec{
-			Results: []v1beta1.PipelineResult{{
+		spec: &v1.PipelineSpec{
+			Results: []v1.PipelineResult{{
 				Name:  "foo-result",
-				Value: *v1beta1.NewStructuredValues("test $(tasks.pt1.results.result1) 123"),
+				Value: *v1.NewStructuredValues("test $(tasks.pt1.results.result1) 123"),
 			}},
 		},
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
 			},
 			ResolvedTask: &resources.ResolvedTask{
 				TaskName: "t",
-				TaskSpec: &v1beta1.TaskSpec{
-					Results: []v1beta1.TaskResult{{
+				TaskSpec: &v1.TaskSpec{
+					Results: []v1.TaskResult{{
 						Name: "result1",
 					}},
 				},
@@ -319,10 +319,10 @@ func TestValidatePipelineResults_ValidStates(t *testing.T) {
 // TestValidatePipelineResults tests that a result variable used in a PipelineResult
 // with a misnamed PipelineTask is correctly caught by the validatePipelineResults func.
 func TestValidatePipelineResults_IncorrectTaskName(t *testing.T) {
-	spec := &v1beta1.PipelineSpec{
-		Results: []v1beta1.PipelineResult{{
+	spec := &v1.PipelineSpec{
+		Results: []v1.PipelineResult{{
 			Name:  "foo-result",
-			Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result1)"),
+			Value: *v1.NewStructuredValues("$(tasks.pt1.results.result1)"),
 		}},
 	}
 	state := PipelineRunState{}
@@ -335,20 +335,20 @@ func TestValidatePipelineResults_IncorrectTaskName(t *testing.T) {
 // TestValidatePipelineResults tests that a result variable used in a PipelineResult
 // with a misnamed Result is correctly caught by the validatePipelineResults func.
 func TestValidatePipelineResults_IncorrectResultName(t *testing.T) {
-	spec := &v1beta1.PipelineSpec{
-		Results: []v1beta1.PipelineResult{{
+	spec := &v1.PipelineSpec{
+		Results: []v1.PipelineResult{{
 			Name:  "foo-result",
-			Value: *v1beta1.NewStructuredValues("$(tasks.pt1.results.result1)"),
+			Value: *v1.NewStructuredValues("$(tasks.pt1.results.result1)"),
 		}},
 	}
 	state := PipelineRunState{{
-		PipelineTask: &v1beta1.PipelineTask{
+		PipelineTask: &v1.PipelineTask{
 			Name: "pt1",
 		},
 		ResolvedTask: &resources.ResolvedTask{
 			TaskName: "t",
-			TaskSpec: &v1beta1.TaskSpec{
-				Results: []v1beta1.TaskResult{{
+			TaskSpec: &v1.TaskSpec{
+				Results: []v1.TaskResult{{
 					Name: "not-the-result-youre-looking-for",
 				}},
 			},
@@ -365,18 +365,18 @@ func TestValidatePipelineResults_IncorrectResultName(t *testing.T) {
 func TestValidateOptionalWorkspaces_ValidStates(t *testing.T) {
 	for _, tc := range []struct {
 		desc       string
-		workspaces []v1beta1.PipelineWorkspaceDeclaration
+		workspaces []v1.PipelineWorkspaceDeclaration
 		state      PipelineRunState
 	}{{
 		desc:       "no workspaces declared",
 		workspaces: nil,
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:       "pt1",
 				Workspaces: nil,
 			},
 			ResolvedTask: &resources.ResolvedTask{
-				TaskSpec: &v1beta1.TaskSpec{
+				TaskSpec: &v1.TaskSpec{
 					Workspaces: nil,
 				},
 			},
@@ -385,13 +385,13 @@ func TestValidateOptionalWorkspaces_ValidStates(t *testing.T) {
 		desc:       "pipeline can omit workspace if task workspace is optional",
 		workspaces: nil,
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name:       "pt1",
-				Workspaces: []v1beta1.WorkspacePipelineTaskBinding{},
+				Workspaces: []v1.WorkspacePipelineTaskBinding{},
 			},
 			ResolvedTask: &resources.ResolvedTask{
-				TaskSpec: &v1beta1.TaskSpec{
-					Workspaces: []v1beta1.WorkspaceDeclaration{{
+				TaskSpec: &v1.TaskSpec{
+					Workspaces: []v1.WorkspaceDeclaration{{
 						Name:     "foo",
 						Optional: true,
 					}},
@@ -400,21 +400,21 @@ func TestValidateOptionalWorkspaces_ValidStates(t *testing.T) {
 		}},
 	}, {
 		desc: "optional pipeline workspace matches optional task workspace",
-		workspaces: []v1beta1.PipelineWorkspaceDeclaration{{
+		workspaces: []v1.PipelineWorkspaceDeclaration{{
 			Name:     "ws1",
 			Optional: true,
 		}},
 		state: PipelineRunState{{
-			PipelineTask: &v1beta1.PipelineTask{
+			PipelineTask: &v1.PipelineTask{
 				Name: "pt1",
-				Workspaces: []v1beta1.WorkspacePipelineTaskBinding{{
+				Workspaces: []v1.WorkspacePipelineTaskBinding{{
 					Name:      "foo",
 					Workspace: "ws1",
 				}},
 			},
 			ResolvedTask: &resources.ResolvedTask{
-				TaskSpec: &v1beta1.TaskSpec{
-					Workspaces: []v1beta1.WorkspaceDeclaration{{
+				TaskSpec: &v1.TaskSpec{
+					Workspaces: []v1.WorkspaceDeclaration{{
 						Name:     "foo",
 						Optional: true,
 					}},
@@ -433,21 +433,21 @@ func TestValidateOptionalWorkspaces_ValidStates(t *testing.T) {
 // TestValidateOptionalWorkspaces tests that an error is generated if an optional pipeline
 // workspace is bound to a non-optional task workspace.
 func TestValidateOptionalWorkspaces_NonOptionalTaskWorkspace(t *testing.T) {
-	workspaces := []v1beta1.PipelineWorkspaceDeclaration{{
+	workspaces := []v1.PipelineWorkspaceDeclaration{{
 		Name:     "ws1",
 		Optional: true,
 	}}
 	state := PipelineRunState{{
-		PipelineTask: &v1beta1.PipelineTask{
+		PipelineTask: &v1.PipelineTask{
 			Name: "pt1",
-			Workspaces: []v1beta1.WorkspacePipelineTaskBinding{{
+			Workspaces: []v1.WorkspacePipelineTaskBinding{{
 				Name:      "foo",
 				Workspace: "ws1",
 			}},
 		},
 		ResolvedTask: &resources.ResolvedTask{
-			TaskSpec: &v1beta1.TaskSpec{
-				Workspaces: []v1beta1.WorkspaceDeclaration{{
+			TaskSpec: &v1.TaskSpec{
+				Workspaces: []v1.WorkspaceDeclaration{{
 					Name:     "foo",
 					Optional: false,
 				}},

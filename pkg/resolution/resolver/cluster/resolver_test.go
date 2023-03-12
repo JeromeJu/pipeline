@@ -28,6 +28,7 @@ import (
 
 	"github.com/google/go-cmp/cmp"
 	resolverconfig "github.com/tektoncd/pipeline/pkg/apis/config/resolver"
+	pipelinev1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	pipelinev1beta1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	"github.com/tektoncd/pipeline/pkg/apis/resolution/v1beta1"
 	ttesting "github.com/tektoncd/pipeline/pkg/reconciler/testing"
@@ -186,7 +187,7 @@ func TestValidateParamsFailure(t *testing.T) {
 func TestResolve(t *testing.T) {
 	defaultNS := "pipeline-ns"
 
-	exampleTask := &pipelinev1beta1.Task{
+	exampleTask := &pipelinev1.Task{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "example-task",
 			Namespace:       "task-ns",
@@ -195,10 +196,10 @@ func TestResolve(t *testing.T) {
 		},
 		TypeMeta: metav1.TypeMeta{
 			Kind:       string(pipelinev1beta1.NamespacedTaskKind),
-			APIVersion: "tekton.dev/v1beta1",
+			APIVersion: "tekton.dev/v1",
 		},
-		Spec: pipelinev1beta1.TaskSpec{
-			Steps: []pipelinev1beta1.Step{{
+		Spec: pipelinev1.TaskSpec{
+			Steps: []pipelinev1.Step{{
 				Name:    "some-step",
 				Image:   "some-image",
 				Command: []string{"something"},
@@ -214,7 +215,7 @@ func TestResolve(t *testing.T) {
 		t.Fatalf("couldn't marshal task spec: %v", err)
 	}
 
-	examplePipeline := &pipelinev1beta1.Pipeline{
+	examplePipeline := &pipelinev1.Pipeline{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:            "example-pipeline",
 			Namespace:       defaultNS,
@@ -225,12 +226,12 @@ func TestResolve(t *testing.T) {
 			Kind:       "Pipeline",
 			APIVersion: "tekton.dev/v1beta1",
 		},
-		Spec: pipelinev1beta1.PipelineSpec{
-			Tasks: []pipelinev1beta1.PipelineTask{{
+		Spec: pipelinev1.PipelineSpec{
+			Tasks: []pipelinev1.PipelineTask{{
 				Name: "some-pipeline-task",
-				TaskRef: &pipelinev1beta1.TaskRef{
+				TaskRef: &pipelinev1.TaskRef{
 					Name: "some-task",
-					Kind: pipelinev1beta1.NamespacedTaskKind,
+					Kind: pipelinev1.NamespacedTaskKind,
 				},
 			}},
 		},
@@ -389,9 +390,9 @@ func TestResolve(t *testing.T) {
 						"enable-cluster-resolver": "true",
 					},
 				}},
-				Pipelines:          []*pipelinev1beta1.Pipeline{examplePipeline},
+				Pipelines:          []*pipelinev1.Pipeline{examplePipeline},
 				ResolutionRequests: []*v1beta1.ResolutionRequest{request},
-				Tasks:              []*pipelinev1beta1.Task{exampleTask},
+				Tasks:              []*pipelinev1.Task{exampleTask},
 			}
 
 			resolver := &Resolver{}

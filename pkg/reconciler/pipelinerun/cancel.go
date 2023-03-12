@@ -24,6 +24,11 @@ import (
 	"strings"
 	"time"
 
+<<<<<<< Updated upstream
+=======
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+>>>>>>> Stashed changes
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	clientset "github.com/tektoncd/pipeline/pkg/client/clientset/versioned"
@@ -45,12 +50,12 @@ func init() {
 		{
 			Operation: "add",
 			Path:      "/spec/status",
-			Value:     v1beta1.TaskRunSpecStatusCancelled,
+			Value:     v1.TaskRunSpecStatusCancelled,
 		},
 		{
 			Operation: "add",
 			Path:      "/spec/statusMessage",
-			Value:     v1beta1.TaskRunCancelledByPipelineMsg,
+			Value:     v1.TaskRunCancelledByPipelineMsg,
 		}})
 	if err != nil {
 		log.Fatalf("failed to marshal TaskRun cancel patch bytes: %v", err)
@@ -116,7 +121,7 @@ func cancelTaskRun(ctx context.Context, taskRunName string, namespace string, cl
 }
 
 // cancelPipelineRun marks the PipelineRun as cancelled and any resolved TaskRun(s) too.
-func cancelPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface) error {
+func cancelPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface) error {
 	errs := cancelPipelineTaskRuns(ctx, logger, pr, clientSet)
 
 	// If we successfully cancelled all the TaskRuns and Runs, we can consider the PipelineRun cancelled.
@@ -146,12 +151,12 @@ func cancelPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1bet
 }
 
 // cancelPipelineTaskRuns patches `TaskRun` and `Run` with canceled status
-func cancelPipelineTaskRuns(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface) []string {
+func cancelPipelineTaskRuns(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface) []string {
 	return cancelPipelineTaskRunsForTaskNames(ctx, logger, pr, clientSet, sets.NewString())
 }
 
 // cancelPipelineTaskRunsForTaskNames patches `TaskRun`s and `Run`s for the given task names, or all if no task names are given, with canceled status
-func cancelPipelineTaskRunsForTaskNames(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface, taskNames sets.String) []string {
+func cancelPipelineTaskRunsForTaskNames(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface, taskNames sets.String) []string {
 	errs := []string{}
 
 	trNames, customRunNames, runNames, err := getChildObjectsFromPRStatusForTaskNames(ctx, pr.Status, taskNames)
@@ -191,7 +196,7 @@ func cancelPipelineTaskRunsForTaskNames(ctx context.Context, logger *zap.Sugared
 
 // getChildObjectsFromPRStatusForTaskNames returns taskruns, customruns, and runs in the PipelineRunStatus's ChildReferences,
 // based on the given set of PipelineTask names. If that set is empty, all are returned.
-func getChildObjectsFromPRStatusForTaskNames(ctx context.Context, prs v1beta1.PipelineRunStatus, taskNames sets.String) ([]string, []string, []string, error) {
+func getChildObjectsFromPRStatusForTaskNames(ctx context.Context, prs v1.PipelineRunStatus, taskNames sets.String) ([]string, []string, []string, error) {
 	var trNames []string
 	var customRunNames []string
 	var runNames []string
@@ -221,7 +226,7 @@ func getChildObjectsFromPRStatusForTaskNames(ctx context.Context, prs v1beta1.Pi
 }
 
 // gracefullyCancelPipelineRun marks any non-final resolved TaskRun(s) as cancelled and runs finally.
-func gracefullyCancelPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1beta1.PipelineRun, clientSet clientset.Interface) error {
+func gracefullyCancelPipelineRun(ctx context.Context, logger *zap.SugaredLogger, pr *v1.PipelineRun, clientSet clientset.Interface) error {
 	errs := cancelPipelineTaskRuns(ctx, logger, pr, clientSet)
 
 	// If we successfully cancelled all the TaskRuns and Runs, we can proceed with the PipelineRun reconciliation to trigger finally.

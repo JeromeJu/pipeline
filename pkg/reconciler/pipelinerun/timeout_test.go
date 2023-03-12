@@ -18,6 +18,11 @@ import (
 	"testing"
 
 	"github.com/tektoncd/pipeline/pkg/apis/config"
+<<<<<<< Updated upstream
+=======
+	"github.com/tektoncd/pipeline/pkg/apis/pipeline"
+	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
+>>>>>>> Stashed changes
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1alpha1"
 	"github.com/tektoncd/pipeline/pkg/apis/pipeline/v1beta1"
 	_ "github.com/tektoncd/pipeline/pkg/pipelinerunmetrics/fake" // Make sure the pipelinerunmetrics are setup
@@ -31,43 +36,57 @@ import (
 
 func TestTimeoutPipelineRun(t *testing.T) {
 	testCases := []struct {
-		name                  string
-		useV1Beta1CustomTasks bool
-		pipelineRun           *v1beta1.PipelineRun
-		taskRuns              []*v1beta1.TaskRun
-		customRuns            []*v1beta1.CustomRun
-		runs                  []*v1alpha1.Run
-		wantErr               bool
+		name             string
+		usev1CustomTasks bool
+		pipelineRun      *v1.PipelineRun
+		taskRuns         []*v1.TaskRun
+		customRuns       []*v1beta1.CustomRun
+		runs             []*v1alpha1.Run
+		wantErr          bool
 	}{{
 		name: "no-resolved-taskrun",
-		pipelineRun: &v1beta1.PipelineRun{
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
-			Spec:       v1beta1.PipelineRunSpec{},
+			Spec:       v1.PipelineRunSpec{},
 		},
 	}, {
 		name: "one-taskrun",
-		pipelineRun: &v1beta1.PipelineRun{
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
+<<<<<<< Updated upstream
 			Spec:       v1beta1.PipelineRunSpec{},
 			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
 				ChildReferences: []v1beta1.ChildStatusReference{{
 					TypeMeta:         runtime.TypeMeta{Kind: taskRun},
+=======
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{{
+					TypeMeta:         runtime.TypeMeta{Kind: "TaskRun"},
+>>>>>>> Stashed changes
 					Name:             "t1",
 					PipelineTaskName: "task-1",
 				}},
 			}},
 		},
-		taskRuns: []*v1beta1.TaskRun{
+		taskRuns: []*v1.TaskRun{
 			{ObjectMeta: metav1.ObjectMeta{Name: "t1"}},
 		},
 	}, {
 		name: "multiple-taskruns",
-		pipelineRun: &v1beta1.PipelineRun{
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
+<<<<<<< Updated upstream
 			Spec:       v1beta1.PipelineRunSpec{},
 			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
 				ChildReferences: []v1beta1.ChildStatusReference{{
 					TypeMeta:         runtime.TypeMeta{Kind: taskRun},
+=======
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{{
+					TypeMeta:         runtime.TypeMeta{Kind: "TaskRun"},
+>>>>>>> Stashed changes
 					Name:             "t1",
 					PipelineTaskName: "task-1",
 				}, {
@@ -77,18 +96,25 @@ func TestTimeoutPipelineRun(t *testing.T) {
 				}},
 			}},
 		},
-		taskRuns: []*v1beta1.TaskRun{
+		taskRuns: []*v1.TaskRun{
 			{ObjectMeta: metav1.ObjectMeta{Name: "t1"}},
 			{ObjectMeta: metav1.ObjectMeta{Name: "t2"}},
 		},
 	}, {
 		name: "multiple-runs",
-		pipelineRun: &v1beta1.PipelineRun{
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
+<<<<<<< Updated upstream
 			Spec:       v1beta1.PipelineRunSpec{},
 			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
 				ChildReferences: []v1beta1.ChildStatusReference{{
 					TypeMeta:         runtime.TypeMeta{Kind: customRun},
+=======
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{{
+					TypeMeta:         runtime.TypeMeta{Kind: "CustomRun"},
+>>>>>>> Stashed changes
 					Name:             "t1",
 					PipelineTaskName: "task-1",
 				}, {
@@ -103,14 +129,21 @@ func TestTimeoutPipelineRun(t *testing.T) {
 			{ObjectMeta: metav1.ObjectMeta{Name: "t2"}},
 		},
 	}, {
-		name:                  "multiple-runs-beta-custom-tasks",
-		useV1Beta1CustomTasks: true,
-		pipelineRun: &v1beta1.PipelineRun{
+		name:             "multiple-runs-beta-custom-tasks",
+		usev1CustomTasks: true,
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
+<<<<<<< Updated upstream
 			Spec:       v1beta1.PipelineRunSpec{},
 			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
 				ChildReferences: []v1beta1.ChildStatusReference{{
 					TypeMeta:         runtime.TypeMeta{Kind: customRun},
+=======
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{{
+					TypeMeta:         runtime.TypeMeta{Kind: "CustomRun"},
+>>>>>>> Stashed changes
 					Name:             "t1",
 					PipelineTaskName: "task-1",
 				}, {
@@ -126,11 +159,11 @@ func TestTimeoutPipelineRun(t *testing.T) {
 		},
 	}, {
 		name: "multiple-taskruns-and-runs",
-		pipelineRun: &v1beta1.PipelineRun{
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
-			Spec:       v1beta1.PipelineRunSpec{},
-			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-				ChildReferences: []v1beta1.ChildStatusReference{
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{
 					{
 						TypeMeta:         runtime.TypeMeta{Kind: taskRun},
 						Name:             "t1",
@@ -160,7 +193,7 @@ func TestTimeoutPipelineRun(t *testing.T) {
 				},
 			}},
 		},
-		taskRuns: []*v1beta1.TaskRun{
+		taskRuns: []*v1.TaskRun{
 			{ObjectMeta: metav1.ObjectMeta{Name: "t1"}},
 			{ObjectMeta: metav1.ObjectMeta{Name: "t2"}},
 		},
@@ -169,13 +202,13 @@ func TestTimeoutPipelineRun(t *testing.T) {
 			{ObjectMeta: metav1.ObjectMeta{Name: "r2"}},
 		},
 	}, {
-		name:                  "child-references-beta-custom-tasks",
-		useV1Beta1CustomTasks: true,
-		pipelineRun: &v1beta1.PipelineRun{
+		name:             "child-references-beta-custom-tasks",
+		usev1CustomTasks: true,
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
-			Spec:       v1beta1.PipelineRunSpec{},
-			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-				ChildReferences: []v1beta1.ChildStatusReference{
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{
 					{
 						TypeMeta:         runtime.TypeMeta{Kind: taskRun},
 						Name:             "t1",
@@ -188,16 +221,26 @@ func TestTimeoutPipelineRun(t *testing.T) {
 					},
 					{
 						TypeMeta: runtime.TypeMeta{
+<<<<<<< Updated upstream
 							APIVersion: v1beta1.SchemeGroupVersion.String(),
 							Kind:       customRun,
+=======
+							APIVersion: v1.SchemeGroupVersion.String(),
+							Kind:       pipeline.CustomRunControllerName,
+>>>>>>> Stashed changes
 						},
 						Name:             "r1",
 						PipelineTaskName: "run-1",
 					},
 					{
 						TypeMeta: runtime.TypeMeta{
+<<<<<<< Updated upstream
 							APIVersion: v1beta1.SchemeGroupVersion.String(),
 							Kind:       customRun,
+=======
+							APIVersion: v1.SchemeGroupVersion.String(),
+							Kind:       pipeline.CustomRunControllerName,
+>>>>>>> Stashed changes
 						},
 						Name:             "r2",
 						PipelineTaskName: "run-2",
@@ -205,7 +248,7 @@ func TestTimeoutPipelineRun(t *testing.T) {
 				},
 			}},
 		},
-		taskRuns: []*v1beta1.TaskRun{
+		taskRuns: []*v1.TaskRun{
 			{ObjectMeta: metav1.ObjectMeta{Name: "t1"}},
 			{ObjectMeta: metav1.ObjectMeta{Name: "t2"}},
 		},
@@ -215,11 +258,11 @@ func TestTimeoutPipelineRun(t *testing.T) {
 		},
 	}, {
 		name: "unknown-kind-on-child-references",
-		pipelineRun: &v1beta1.PipelineRun{
+		pipelineRun: &v1.PipelineRun{
 			ObjectMeta: metav1.ObjectMeta{Name: "test-pipeline-run-timedout"},
-			Spec:       v1beta1.PipelineRunSpec{},
-			Status: v1beta1.PipelineRunStatus{PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
-				ChildReferences: []v1beta1.ChildStatusReference{{
+			Spec:       v1.PipelineRunSpec{},
+			Status: v1.PipelineRunStatus{PipelineRunStatusFields: v1.PipelineRunStatusFields{
+				ChildReferences: []v1.ChildStatusReference{{
 					TypeMeta:         runtime.TypeMeta{Kind: "InvalidKind"},
 					Name:             "t1",
 					PipelineTaskName: "task-1",
@@ -232,7 +275,7 @@ func TestTimeoutPipelineRun(t *testing.T) {
 		tc := tc
 		t.Run(tc.name, func(t *testing.T) {
 			d := test.Data{
-				PipelineRuns: []*v1beta1.PipelineRun{tc.pipelineRun},
+				PipelineRuns: []*v1.PipelineRun{tc.pipelineRun},
 				TaskRuns:     tc.taskRuns,
 				CustomRuns:   tc.customRuns,
 				Runs:         tc.runs,
@@ -240,7 +283,7 @@ func TestTimeoutPipelineRun(t *testing.T) {
 			ctx, _ := ttesting.SetupFakeContext(t)
 			cfg := config.NewStore(logtesting.TestLogger(t))
 			cm := newFeatureFlagsConfigMap()
-			if tc.useV1Beta1CustomTasks {
+			if tc.usev1CustomTasks {
 				cm = withCustomTaskVersion(cm, config.CustomTaskVersionBeta)
 			}
 			cfg.OnConfigChanged(cm)
@@ -265,21 +308,21 @@ func TestTimeoutPipelineRun(t *testing.T) {
 				}
 				if tc.taskRuns != nil {
 					for _, expectedTR := range tc.taskRuns {
-						tr, err := c.Pipeline.TektonV1beta1().TaskRuns("").Get(ctx, expectedTR.Name, metav1.GetOptions{})
+						tr, err := c.Pipeline.TektonV1().TaskRuns("").Get(ctx, expectedTR.Name, metav1.GetOptions{})
 						if err != nil {
 							t.Fatalf("couldn't get expected TaskRun %s, got error %s", expectedTR.Name, err)
 						}
-						if tr.Spec.Status != v1beta1.TaskRunSpecStatusCancelled {
+						if tr.Spec.Status != v1.TaskRunSpecStatusCancelled {
 							t.Errorf("expected task %q to be marked as timed out, was %q", tr.Name, tr.Spec.Status)
 						}
-						if tr.Spec.StatusMessage != v1beta1.TaskRunCancelledByPipelineTimeoutMsg {
+						if tr.Spec.StatusMessage != v1.TaskRunCancelledByPipelineTimeoutMsg {
 							t.Errorf("expected task %s to have the timeout-specific status message, was %s", tr.Name, tr.Spec.StatusMessage)
 						}
 					}
 				}
 				if tc.customRuns != nil {
 					for _, expectedCustomRun := range tc.customRuns {
-						r, err := c.Pipeline.TektonV1beta1().CustomRuns("").Get(ctx, expectedCustomRun.Name, metav1.GetOptions{})
+						r, err := c.Pipeline.TektonV1().CustomRuns("").Get(ctx, expectedCustomRun.Name, metav1.GetOptions{})
 						if err != nil {
 							t.Fatalf("couldn't get expected CustomRun %s, got error %s", expectedCustomRun.Name, err)
 						}
