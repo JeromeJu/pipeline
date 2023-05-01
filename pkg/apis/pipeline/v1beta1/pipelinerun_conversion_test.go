@@ -18,6 +18,7 @@ package v1beta1_test
 
 import (
 	"context"
+	"strconv"
 	"testing"
 	"time"
 
@@ -477,4 +478,128 @@ func TestPipelineRunConversionRoundTrip(t *testing.T) {
 
 func lessChildReferences(i, j v1beta1.ChildStatusReference) bool {
 	return i.Name < j.Name
+}
+
+func TestPipelineRunConversionEmbeddedStatusLargeValue(t *testing.T) {
+	for i := 0; i < 100; i++ {
+		trName := "tr-" + strconv.Itoa(i)
+		taskRuns[trName] = trs
+	}
+	runs["r-0"] = rrs
+	childRefs := []v1.ChildStatusReference{{
+		TypeMeta:         runtime.TypeMeta{Kind: "TaskRun", APIVersion: "tekton.dev/v1beta1"},
+		Name:             "tr-0",
+		PipelineTaskName: "ptn",
+		WhenExpressions:  []v1.WhenExpression{{Input: "default-value", Operator: "in", Values: []string{"val"}}},
+	}, {TypeMeta: runtime.TypeMeta{Kind: "Run", APIVersion: "tekton.dev/v1alpha1"},
+		Name:             "r-0",
+		PipelineTaskName: "ptn-0",
+		WhenExpressions:  []v1.WhenExpression{{Input: "default-value-0", Operator: "in", Values: []string{"val-0", "val-1"}}},
+	}}
+	annotations := map[string]string{
+		"tekton.dev/v1beta1Runs":     "eyJyLTAiOnsicGlwZWxpbmVUYXNrTmFtZSI6InB0bi0wIiwic3RhdHVzIjp7InJlc3VsdHMiOlt7Im5hbWUiOiJmb28iLCJ2YWx1ZSI6ImJhciJ9XSwiZXh0cmFGaWVsZHMiOm51bGx9LCJ3aGVuRXhwcmVzc2lvbnMiOlt7ImlucHV0IjoiZGVmYXVsdC12YWx1ZS0wIiwib3BlcmF0b3IiOiJpbiIsInZhbHVlcyI6WyJ2YWwtMCIsInZhbC0xIl19XX19",
+		"tekton.dev/v1beta1TaskRuns": "eyJ0ci0wIjp7InBpcGVsaW5lVGFza05hbWUiOiJwdG4iLCJzdGF0dXMiOnsicG9kTmFtZSI6InBvZC1uYW1lIiwic3RlcHMiOlt7InJ1bm5pbmciOnsic3RhcnRlZEF0IjpudWxsfSwibmFtZSI6InJ1bm5pbmctc3RlcCIsImNvbnRhaW5lciI6InN0ZXAtcnVubmluZy1zdGVwIn1dLCJjbG91ZEV2ZW50cyI6W3sidGFyZ2V0IjoiaHR0cC8vc2luazEiLCJzdGF0dXMiOnsiY29uZGl0aW9uIjoiVW5rbm93biIsIm1lc3NhZ2UiOiIiLCJyZXRyeUNvdW50IjowfX0seyJ0YXJnZXQiOiJodHRwLy9zaW5rMiIsInN0YXR1cyI6eyJjb25kaXRpb24iOiJVbmtub3duIiwibWVzc2FnZSI6IiIsInJldHJ5Q291bnQiOjB9fV0sInJldHJpZXNTdGF0dXMiOlt7ImNvbmRpdGlvbnMiOlt7InR5cGUiOiJTdWNjZWVkZWQiLCJzdGF0dXMiOiJGYWxzZSIsImxhc3RUcmFuc2l0aW9uVGltZSI6bnVsbH1dLCJwb2ROYW1lIjoiIn1dLCJyZXNvdXJjZXNSZXN1bHQiOlt7ImtleSI6ImRpZ2VzdCIsInZhbHVlIjoic2hhMjU2OjEyMzQiLCJyZXNvdXJjZU5hbWUiOiJzb3VyY2UtaW1hZ2UifV0sInNpZGVjYXJzIjpbeyJ0ZXJtaW5hdGVkIjp7ImV4aXRDb2RlIjoxLCJyZWFzb24iOiJFcnJvciIsIm1lc3NhZ2UiOiJFcnJvciIsInN0YXJ0ZWRBdCI6bnVsbCwiZmluaXNoZWRBdCI6bnVsbH0sIm5hbWUiOiJlcnJvciIsImNvbnRhaW5lciI6InNpZGVjYXItZXJyb3IiLCJpbWFnZUlEIjoiaW1hZ2UtaWQifV19LCJ3aGVuRXhwcmVzc2lvbnMiOlt7ImlucHV0IjoiZGVmYXVsdC12YWx1ZSIsIm9wZXJhdG9yIjoiaW4iLCJ2YWx1ZXMiOlsidmFsIl19XX19",
+	}
+
+	tests := []struct {
+		name           string
+		in             *v1.PipelineRun
+		want           *v1beta1.PipelineRun
+		embeddedStatus string
+	}{{
+		name: "both",
+		in: &v1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "foo",
+				Namespace:   "bar",
+				Annotations: annotations,
+			},
+			Spec: v1.PipelineRunSpec{
+				PipelineRef: &v1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1.PipelineRunStatus{
+				PipelineRunStatusFields: v1.PipelineRunStatusFields{
+					ChildReferences: childRefs,
+				},
+			},
+		},
+		want: &v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1beta1.PipelineRunStatus{
+				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
+					ChildReferences: append(childRefTaskRuns, childRefRuns...),
+					TaskRuns:        taskRuns,
+					Runs:            runs,
+				},
+			},
+		},
+		embeddedStatus: config.BothEmbeddedStatus,
+	}, {
+		name: "full",
+		in: &v1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "foo",
+				Namespace:   "bar",
+				Annotations: annotations,
+			},
+			Spec: v1.PipelineRunSpec{
+				PipelineRef: &v1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1.PipelineRunStatus{
+				PipelineRunStatusFields: v1.PipelineRunStatusFields{
+					ChildReferences: childRefs,
+				},
+			},
+		},
+		want: &v1beta1.PipelineRun{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "foo",
+				Namespace: "bar",
+			},
+			Spec: v1beta1.PipelineRunSpec{
+				PipelineRef: &v1beta1.PipelineRef{
+					Name: "test",
+				},
+			},
+			Status: v1beta1.PipelineRunStatus{
+				PipelineRunStatusFields: v1beta1.PipelineRunStatusFields{
+					TaskRuns: taskRuns,
+					Runs:     runs,
+				},
+			},
+		},
+		embeddedStatus: config.FullEmbeddedStatus,
+	}}
+	for _, test := range tests {
+		versions := []apis.Convertible{&v1.PipelineRun{}}
+		for _, version := range versions {
+			t.Run(test.name, func(t *testing.T) {
+				ver := version
+				if err := test.in.ConvertTo(context.Background(), ver); err != nil {
+					t.Errorf("ConvertTo() = %v", err)
+				}
+				t.Logf("ConvertTo() = %#v", ver)
+				got := &v1beta1.PipelineRun{}
+				if err := got.ConvertFrom(context.Background(), ver); err != nil {
+					t.Errorf("ConvertFrom() = %v", err)
+				}
+				t.Logf("ConvertFrom() = %#v", got)
+				if d := cmp.Diff(test.want, got, cmpopts.EquateEmpty()); d != "" {
+					t.Errorf("roundtrip %s", diff.PrintWantGot(d))
+				}
+			})
+		}
+	}
 }
