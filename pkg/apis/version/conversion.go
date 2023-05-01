@@ -17,6 +17,7 @@ limitations under the License.
 package version
 
 import (
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 
@@ -27,13 +28,14 @@ import (
 // the metadata under the input key.
 func SerializeToMetadata(meta *metav1.ObjectMeta, field interface{}, key string) error {
 	bytes, err := json.Marshal(field)
+	encoded := base64.StdEncoding.EncodeToString([]byte(bytes))
 	if err != nil {
 		return fmt.Errorf("error serializing field: %w", err)
 	}
 	if meta.Annotations == nil {
 		meta.Annotations = make(map[string]string)
 	}
-	meta.Annotations[key] = string(bytes)
+	meta.Annotations[key] = string(encoded)
 	return nil
 }
 
@@ -45,7 +47,12 @@ func DeserializeFromMetadata(meta *metav1.ObjectMeta, to interface{}, key string
 		return nil
 	}
 	if str, ok := meta.Annotations[key]; ok {
-		if err := json.Unmarshal([]byte(str), to); err != nil {
+		decoded, err := base64.StdEncoding.DecodeString(str)
+		if err != nil {
+			return fmt.Errorf("error decoding string from encoded marshalled bytes %w", err)
+		}
+
+		if err := json.Unmarshal([]byte(decoded), to); err != nil {
 			return fmt.Errorf("error deserializing key %s from metadata: %w", key, err)
 		}
 		delete(meta.Annotations, key)
