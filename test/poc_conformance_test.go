@@ -21,6 +21,8 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/google/go-cmp/cmp"
+	"github.com/google/go-cmp/cmp/cmpopts"
 	v1 "github.com/tektoncd/pipeline/pkg/apis/pipeline/v1"
 	"github.com/tektoncd/pipeline/test/parse"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -133,7 +135,7 @@ spec:
 	}
 }
 
-// TestConformanceShouldHonorTaskRunTimeout examines population of Conditions
+// TestConformanceShouldPopulateConditions examines population of Conditions
 // fields. It creates the a TaskRun with minimal specifications and checks the
 // required Condition Status and Type.
 func TestConformanceShouldPopulateConditions(t *testing.T) {
@@ -172,6 +174,159 @@ spec:
 	}
 }
 
+// TestConformanceShouldProvidePipelineTaskParams examines the PipelineTask
+// Params functionality by creating a Pipeline that performs addition in its
+// Task for validation.
+func TestConformanceShouldProvidePipelineTaskParams(t *testing.T) {
+	var op0, op1 = 10, 1
+	expectedParams := v1.Params{{
+		Name:  "op0",
+		Value: v1.ParamValue{StringVal: strconv.Itoa(op0)},
+	}, {
+		Name:  "op1",
+		Value: v1.ParamValue{StringVal: strconv.Itoa(op1)}},
+	}
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: %s
+spec:
+  pipelineSpec:
+    tasks:
+    - name: sum-params
+      taskSpec:
+        params:
+        - name: op0
+          type: string
+          description: The first integer from PipelineTask Param
+        - name: op1
+          type: string
+          description: The second integer from PipelineTask Param
+        steps:
+        - name: sum
+          image: bash:latest
+          script: |
+            #!/usr/bin/env bash
+            echo -n $(( "$(inputs.params.op0)" + "$(inputs.params.op1)" ))
+      params:
+      - name: op0
+        value: %s
+      - name: op1
+        value: %s
+`, helpers.ObjectNameForTest(t), strconv.Itoa(op0), strconv.Itoa(op1))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+	if len(resolvedPR.Spec.PipelineSpec.Tasks) != 1 {
+		t.Errorf("Expect vendor service to provide 1 PipelineTask but got: %v", len(resolvedPR.Spec.PipelineSpec.Tasks))
+	}
+
+	if d := cmp.Diff(expectedParams, resolvedPR.Spec.PipelineSpec.Tasks[0].Params, cmpopts.IgnoreFields(v1.ParamValue{}, "Type")); d != "" {
+		t.Errorf("Expect vendor service to provide 2 params 10, 1, but got: %v", d)
+
+	}
+}
+
+// TestConformanceShouldHonorPipelineRunTimeout examines the Timeout behaviour for
+// PipelineRun level. It creates a TaskRun with Timeout and wait in the Step of the
+// inline Task for the time length longer than the specified Timeout.
+// The TaskRun is expected to fail with the Reason `TaskRunTimeout`.
+func TestConformanceShouldHonorPipelineRunTimeout(t *testing.T) {
+	expectedFailedStatus := true
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: %s
+spec:
+  timeouts:
+    tasks: 15s
+  pipelineSpec:
+    tasks:
+    - name: timeout
+      taskSpec:
+        steps:
+        - image: busybox
+          command: ['/bin/sh']
+          args: ['-c', 'sleep 15001']
+`, helpers.ObjectNameForTest(t))
+
+	// Execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t, expectedFailedStatus)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+	if len(resolvedPR.Status.Conditions) != 1 {
+		t.Errorf("Expect vendor service to populate 1 Condition but no")
+	}
+
+	if resolvedPR.Status.Conditions[0].Type != "Succeeded" {
+		t.Errorf("Expect vendor service to populate Condition `Succeeded` but got: %s", resolvedPR.Status.Conditions[0].Type)
+	}
+
+	if resolvedPR.Status.Conditions[0].Status != "False" {
+		t.Errorf("Expect vendor service to populate Condition `False` but got: %s", resolvedPR.Status.Conditions[0].Status)
+	}
+
+	// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed
+	if resolvedPR.Status.Conditions[0].Reason != "Failed" {
+		t.Errorf("Expect vendor service to populate Condition Reason `Failed` but got: %s", resolvedPR.Status.Conditions[0].Reason)
+	}
+}
+
+// TestConformancePRShouldPopulateConditions examines population of Conditions
+// fields. It creates the a PipelineRun with minimal specifications and checks the
+// required Condition Status and Type.
+func TestConformancePRShouldPopulateConditions(t *testing.T) {
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: %s
+spec:
+  pipelineSpec:
+    tasks:
+    - name: pipeline-task-0
+      taskSpec:
+        steps:
+        - name: add
+          image: ubuntu
+          script:
+            echo Hello world!
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+	if len(resolvedPR.Status.Conditions) != 1 {
+		t.Errorf("Expect vendor service to populate 1 Condition but no")
+	}
+
+	if resolvedPR.Status.Conditions[0].Type != "Succeeded" {
+		t.Errorf("Expect vendor service to populate Condition `Succeeded` but got: %s", resolvedPR.Status.Conditions[0].Type)
+	}
+
+	if resolvedPR.Status.Conditions[0].Status != "True" {
+		t.Errorf("Expect vendor service to populate Condition `True` but got: %s", resolvedPR.Status.Conditions[0].Status)
+	}
+}
+
 // ProcessAndSendToTekton takes in vanilla Tekton PipelineRun and TaskRun, waits for the object to succeed and outputs the final PipelineRun and TaskRun with status.
 // The parameters are inputYAML and its Primitive type {PipelineRun, TaskRun}
 // And the return values will be the output YAML string and errors.
@@ -204,31 +359,60 @@ func mockTektonPipelineController(t *testing.T, inputYAML, primitiveType string,
 
 	mvs := MockVendorSerivce{cs: c}
 
-	tr, err := mvs.CreateTaskRun(ctx, inputYAML)
-	if err != nil {
-		return "", err
+	var outputYAML []byte
+	switch primitiveType {
+	case TaskRunInputType:
+		tr, err := mvs.CreateTaskRun(ctx, inputYAML)
+		if err != nil {
+			return "", err
+		}
+
+		if err := mvs.WaitForTaskRun(ctx, tr.Name, expectRunToFail); err != nil {
+			return "", err
+		}
+
+		trGot, err := mvs.GetTaskRun(ctx, tr.Name)
+		if err != nil {
+			return "", err
+		}
+
+		outputYAML, err = yaml.Marshal(trGot)
+		if err != nil {
+			return "", err
+		}
+	case PipelineRunInputType:
+		pr, err := mvs.CreatePipelineRun(ctx, inputYAML)
+		if err != nil {
+			return "", err
+		}
+
+		if err := mvs.WaitForPipelineRun(ctx, pr.Name, expectRunToFail); err != nil {
+			return "", err
+		}
+
+		prGot, err := mvs.GetPipelineRun(ctx, pr.Name)
+		if err != nil {
+			return "", err
+		}
+
+		outputYAML, err = yaml.Marshal(prGot)
+		if err != nil {
+			return "", err
+		}
+	default:
+		return "", fmt.Errorf("invalid input primitive type: %s", primitiveType)
 	}
 
-	if err := mvs.WaitForTaskRun(ctx, tr.Name, expectRunToFail); err != nil {
-		return "", err
-	}
-
-	trGot, err := mvs.GetTaskRun(ctx, tr.Name)
-	if err != nil {
-		return "", err
-	}
-
-	outputYAML, err := yaml.Marshal(trGot)
-	if err != nil {
-		return "", err
-	}
 	return string(outputYAML[:]), nil
 }
 
 type VendorService interface {
-	CreateTaskRun(ctx context.Context, yaml string) (*v1.TaskRun, error)
-	WaitForTaskRun(ctx context.Context, name string) error
+	CreateTaskRun(ctx context.Context, inputYAML string) (*v1.TaskRun, error)
+	WaitForTaskRun(ctx context.Context, name string, expectRunToFail bool) error
 	GetTaskRun(ctx context.Context, name string) (*v1.TaskRun, error)
+	CreatePipelineRun(ctx context.Context, inputYAML string) (*v1.TaskRun, error)
+	WaitForPipelineRun(ctx context.Context, name string, expectRunToFail bool) error
+	GetPipelineRun(ctx context.Context, name string) (*v1.TaskRun, error)
 }
 
 type MockVendorSerivce struct {
@@ -270,4 +454,38 @@ func (mvs MockVendorSerivce) GetTaskRun(ctx context.Context, name string) (*v1.T
 		return nil, fmt.Errorf("failed to get TaskRun `%s`: %s", trGot.Name, err)
 	}
 	return trGot, nil
+}
+
+func (mvs MockVendorSerivce) CreatePipelineRun(ctx context.Context, inputYAML string) (*v1.PipelineRun, error) {
+	var pr v1.PipelineRun
+	if _, _, err := scheme.Codecs.UniversalDeserializer().Decode([]byte(inputYAML), nil, &pr); err != nil {
+		return nil, fmt.Errorf("must parse YAML (%s): %v", inputYAML, err)
+	}
+
+	var prCreated *v1.PipelineRun
+	prCreated, err := mvs.cs.V1PipelineRunClient.Create(ctx, &pr, metav1.CreateOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create PipelineRun `%v`: %w", pr, err)
+	}
+	return prCreated, nil
+}
+
+func (mvs MockVendorSerivce) WaitForPipelineRun(ctx context.Context, name string, expectRunToFail bool) error {
+	var caf ConditionAccessorFn
+	caf = Succeed(name)
+	if expectRunToFail {
+		caf = Failed(name)
+	}
+	if err := WaitForPipelineRunState(ctx, mvs.cs, name, timeout, caf, "WaitPipelineRunDone", v1Version); err != nil {
+		return fmt.Errorf("error waiting for PipelineRun to finish: %s", err)
+	}
+	return nil
+}
+
+func (mvs MockVendorSerivce) GetPipelineRun(ctx context.Context, name string) (*v1.PipelineRun, error) {
+	prGot, err := mvs.cs.V1PipelineRunClient.Get(ctx, name, metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get PipelineRun `%s`: %s", prGot.Name, err)
+	}
+	return prGot, nil
 }
