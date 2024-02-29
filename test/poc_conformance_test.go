@@ -90,6 +90,204 @@ spec:
 	}
 }
 
+// TestConformanceShouldProvideTaskResult examines the TaskResult functionality
+// by creating a TaskRun that performs multiplication in Steps to write to the
+// Task-level result for validation.
+func TestConformanceShouldProvideArrayTaskParam(t *testing.T) {
+	var arrayParam0, arrayParam1 = "foo", "bar"
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  params:
+    - name: array-to-concat
+      value:
+        - %s
+        - %s
+  taskSpec:
+    results:
+    - name: "concat-array"
+    params:
+      - name: array-to-concat
+        type: array
+    steps:
+    - name: concat-array-params
+      image: alpine
+      command: ["/bin/sh", "-c"]
+      args:
+      - echo -n $(params.array-to-concat[0])"-"$(params.array-to-concat[1]) | tee $(results.concat-array.path);
+`, helpers.ObjectNameForTest(t), arrayParam0, arrayParam1)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if len(resolvedTR.Spec.Params) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Param but it has: %v", len(resolvedTR.Spec.Params))
+	}
+	if len(resolvedTR.Spec.Params[0].Value.ArrayVal) != 2 {
+		t.Errorf("Expect vendor service to provide 2 Task Array Params but it has: %v", len(resolvedTR.Spec.Params))
+	}
+
+	// Utilizing TaskResult to verify functionality of Array Params
+	if len(resolvedTR.Status.Results) != 1 {
+		t.Errorf("Expect vendor service to provide 1 result but not")
+	}
+	if resolvedTR.Status.Results[0].Value.StringVal != arrayParam0+"-"+arrayParam1 {
+		t.Errorf("Not producing correct result, expect to get \"%s\" but has: \"%s\"", arrayParam0+"-"+arrayParam1, resolvedTR.Status.Results[0].Value.StringVal)
+	}
+}
+
+func TestConformanceShouldProvideTaskParamDefaults(t *testing.T) {
+	stringParam := "string-foo"
+	arrayParam := []string{"array-foo", "array-bar"}
+	expectedStringParamResultVal := "string-foo-string-baz-default"
+	expectedArrayParamResultVal := "array-foo-array-bar-default"
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  params:
+    - name: array-param
+      value:
+        - %s
+        - %s
+    - name: string-param
+      value: %s
+  taskSpec:
+    results:
+    - name: array-output
+    - name: string-output
+    params:
+      - name: array-param
+        type: array
+      - name: array-defaul-param
+        type: array
+        default: 
+        - "array-foo-default"
+        - "array-bar-default"
+      - name: string-param
+        type: string
+      - name: string-default
+        type: string
+        default: "string-baz-default"
+    steps:
+      - name: string-params-to-result
+        image: bash:3.2
+        command: ["/bin/sh", "-c"]
+        args:
+        - echo -n $(params.string-param)"-"$(params.string-default) | tee $(results.string-output.path);
+      - name: array-params-to-result
+        image: bash:3.2
+        command: ["/bin/sh", "-c"]
+        args:
+        - echo -n $(params.array-param[0])"-"$(params.array-defaul-param[1]) | tee $(results.array-output.path);
+`, helpers.ObjectNameForTest(t), arrayParam[0], arrayParam[1], stringParam)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if len(resolvedTR.Spec.Params) != 2 {
+		t.Errorf("Expect vendor service to provide 2 Params but it has: %v", len(resolvedTR.Spec.Params))
+	}
+	if len(resolvedTR.Spec.Params[0].Value.ArrayVal) != 2 {
+		t.Errorf("Expect vendor service to provide 2 Task Array Params but it has: %v", len(resolvedTR.Spec.Params))
+	}
+	for _, param := range resolvedTR.Spec.Params {
+		if param.Name == "array-param" {
+			paramArr := param.Value.ArrayVal
+			for i, _ := range paramArr {
+				if paramArr[i] != arrayParam[i] {
+					t.Errorf("Expect Params to match %s: %v", arrayParam[i], paramArr[i])
+				}
+			}
+		}
+		if param.Name == "string-param" {
+			if param.Value.StringVal != stringParam {
+				t.Errorf("Not producing correct result, expect to get \"%s\" but has: \"%s\"", stringParam, param.Value.StringVal)
+			}
+		}
+	}
+
+	// Utilizing TaskResult to verify functionality of Task Params Defaults
+	if len(resolvedTR.Status.Results) != 2 {
+		t.Errorf("Expect vendor service to provide 2 result but it has: %v", len(resolvedTR.Status.Results))
+	}
+
+	for _, result := range resolvedTR.Status.Results {
+		if result.Name == "string-output" {
+			resultVal := result.Value.StringVal
+			if resultVal != expectedStringParamResultVal {
+				t.Errorf("Not producing correct result, expect to get \"%s\" but has: \"%s\"", expectedStringParamResultVal, resultVal)
+			}
+		}
+		if result.Name == "array-output" {
+			resultVal := result.Value.StringVal
+			if resultVal != expectedArrayParamResultVal {
+				t.Errorf("Not producing correct result, expect to get \"%s\" but has: \"%s\"", expectedArrayParamResultVal, resultVal)
+			}
+		}
+	}
+}
+
+func TestConformanceShouldProvideTaskParamDescription(t *testing.T) {
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+    name: %s
+spec:
+  taskSpec:
+    params:
+    - name: foo
+      description: foo param
+      default: "foo"
+    steps:
+    - name: add
+      image: alpine
+      env:
+      - name: OP1
+        value: $(params.foo)
+      command: ["/bin/sh", "-c"]
+      args:
+        - echo -n ${OP1}
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if resolvedTR.Spec.TaskSpec.Params[0].Description != "foo param" {
+		t.Errorf("Expect vendor service to provide Param Description \"foo param\" but it has: %s", resolvedTR.Spec.TaskSpec.Params[0].Description)
+	}
+
+	if resolvedTR.Status.TaskSpec.Params[0].Description != "foo param" {
+		t.Errorf("Expect vendor service to provide Param Description \"foo param\" but it has: %s", resolvedTR.Spec.TaskSpec.Params[0].Description)
+	}
+}
+
 // TestConformanceShouldHonorTaskRunTimeout examines the Timeout behaviour for
 // TaskRun level. It creates a TaskRun with Timeout and wait in the Step of the
 // inline Task for the time length longer than the specified Timeout.
@@ -232,6 +430,67 @@ spec:
 	if d := cmp.Diff(expectedParams, resolvedPR.Spec.PipelineSpec.Tasks[0].Params, cmpopts.IgnoreFields(v1.ParamValue{}, "Type")); d != "" {
 		t.Errorf("Expect vendor service to provide 2 params 10, 1, but got: %v", d)
 
+	}
+}
+
+func TestConformanceShouldProvidePipelineResult(t *testing.T) {
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: %s
+spec:
+  params:
+  - name: prefix
+    value: prefix
+  pipelineSpec:
+    results:
+    - name: output
+      type: string
+      value: $(tasks.do-something.results.output)
+    params:
+    - name: prefix
+    tasks:
+    - name: generate-suffix
+      taskSpec:
+        results:
+        - name: suffix
+        steps:
+        - name: generate-suffix
+          image: alpine
+          script: |
+            echo -n "suffix" > $(results.suffix.path)
+    - name: do-something
+      taskSpec:
+        results:
+        - name: output
+        params:
+        - name: arg
+        steps:
+        - name: do-something
+          image: alpine
+          script: |
+            echo -n "$(params.arg)" | tee $(results.output.path)
+      params:
+      - name: arg
+        value: "$(params.prefix):$(tasks.generate-suffix.results.suffix)"
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+
+	if len(resolvedPR.Status.Results) != 1 {
+		t.Errorf("Expect vendor service to provide 1 result but has: %v", len(resolvedPR.Status.Results))
+	}
+
+	if resolvedPR.Status.Results[0].Value.StringVal != "prefix:suffix" {
+		t.Errorf("Not producing correct result :\"%s\"", resolvedPR.Status.Results[0].Value.StringVal)
 	}
 }
 
