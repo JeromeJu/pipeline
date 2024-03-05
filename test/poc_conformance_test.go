@@ -419,15 +419,15 @@ spec:
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
 
 	if len(resolvedTR.Spec.Params) != 1 {
-		t.Errorf("Expect vendor service to provide 1 Param but it has: %v", len(resolvedTR.Spec.Params))
+		t.Errorf("Examining TaskRun Param: expect vendor service to provide TaskRun with 1 Array Param but it has: %v", len(resolvedTR.Spec.Params))
 	}
 	if len(resolvedTR.Spec.Params[0].Value.ArrayVal) != 2 {
-		t.Errorf("Expect vendor service to provide 2 Task Array Params but it has: %v", len(resolvedTR.Spec.Params))
+		t.Errorf("Examining TaskParams: expect vendor service to provide 2 Task Array Param values but it has: %v", len(resolvedTR.Spec.Params[0].Value.ArrayVal))
 	}
 
 	// Utilizing TaskResult to verify functionality of Array Params
 	if len(resolvedTR.Status.Results) != 1 {
-		t.Errorf("Expect vendor service to provide 1 result but not")
+		t.Errorf("Expect vendor service to provide 1 result but it has: %v": len(resolvedTR.Status.Results))
 	}
 	if resolvedTR.Status.Results[0].Value.StringVal != arrayParam0+"-"+arrayParam1 {
 		t.Errorf("Not producing correct result, expect to get \"%s\" but has: \"%s\"", arrayParam0+"-"+arrayParam1, resolvedTR.Status.Results[0].Value.StringVal)
