@@ -37,6 +37,11 @@ const (
 	PipelineRunInputType = "PipelineRun"
 )
 
+// TODO: i.   include the dependencies in docStrings i.e.
+//       ii.  separate input YAMLS in different files
+//       iii. add Succeeded check for all status
+//       iv.  extract generic functions to helpers i.e. checkConditionSucceeded
+
 // TestConformanceShouldProvideTaskResult examines the TaskResult functionality
 // by creating a TaskRun that performs multiplication in Steps to write to the
 // Task-level result for validation.
@@ -90,9 +95,292 @@ spec:
 	}
 }
 
-// TestConformanceShouldProvideTaskResult examines the TaskResult functionality
-// by creating a TaskRun that performs multiplication in Steps to write to the
-// Task-level result for validation.
+func TestConformanceShouldProvideStepScript(t *testing.T) {
+	expectedSteps := map[string]string{
+		"noshebang":                 "Completed",
+		"node":                      "Completed",
+		"python":                    "Completed",
+		"perl":                      "Completed",
+		"params-applied":            "Completed",
+		"args-allowed":              "Completed",
+		"dollar-signs-allowed":      "Completed",
+		"bash-variable-evaluations": "Completed",
+	}
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    params:
+    - name: PARAM
+      default: param-value
+    steps:
+    - name: noshebang
+      image: ubuntu
+      script: echo "no shebang"
+    - name: node
+      image: node
+      script: |
+        #!/usr/bin/env node
+        console.log("Hello from Node!")
+    - name: python
+      image: python
+      script: |
+        #!/usr/bin/env python3
+        print("Hello from Python!")
+    - name: perl
+      image: perl:devel-bullseye
+      script: |
+        #!/usr/bin/perl
+        print "Hello from Perl!"
+    # Test that param values are replaced.
+    - name: params-applied
+      image: python
+      script: |
+        #!/usr/bin/env python3
+        v = '$(params.PARAM)'
+        if v != 'param-value':
+          print('Param values not applied')
+          print('Got: ', v)
+          exit(1)
+    # Test that args are allowed and passed to the script as expected.
+    - name: args-allowed
+      image: ubuntu
+      args: ['hello', 'world']
+      script: |
+        #!/usr/bin/env bash
+        [[ $# == 2 ]]
+        [[ $1 == "hello" ]]
+        [[ $2 == "world" ]]
+    # Test that multiple dollar signs next to each other are not replaced by Kubernetes
+    - name: dollar-signs-allowed
+      image: python
+      script: |
+        #!/usr/bin/env python3
+        if '$' != '\u0024':
+          print('single dollar signs ($) are not passed through as expected :(')
+          exit(1)
+        if '$$' != '\u0024\u0024':
+          print('double dollar signs ($$) are not passed through as expected :(')
+          exit(2)
+        if '$$$' != '\u0024\u0024\u0024':
+          print('three dollar signs ($$$) are not passed through as expected :(')
+          exit(3)
+        if '$$$$' != '\u0024\u0024\u0024\u0024':
+          print('four dollar signs ($$$$) are not passed through as expected :(')
+          exit(4)
+        print('dollar signs appear to be handled correctly! :)')
+
+    # Test that bash scripts with variable evaluations work as expected
+    - name: bash-variable-evaluations
+      image: bash:5.1.8
+      script: |
+        #!/usr/bin/env bash
+        set -xe
+        var1=var1_value
+        var2=var1
+        echo $(eval echo \$$var2) > tmpfile
+        eval_result=$(cat tmpfile)
+        if [ "$eval_result" != "var1_value" ] ; then
+          echo "unexpected eval result: $eval_result"
+          exit 1
+        fi
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if len(resolvedTR.Status.Steps) != len(expectedSteps) {
+		t.Errorf("Expected length of steps %v but has: %v", len(expectedSteps), len(resolvedTR.Status.Steps))
+	}
+
+	for _, resolvedStep := range resolvedTR.Status.Steps {
+		resolvedStepTerminatedReason := resolvedStep.Terminated.Reason
+		if expectedStepState, ok := expectedSteps[resolvedStep.Name]; ok {
+			if resolvedStepTerminatedReason != expectedStepState {
+				t.Fatalf("Expect step %s to have completed successfully but it has Termination Reason: %s", resolvedStep.Name, resolvedStepTerminatedReason)
+			}
+		} else {
+			t.Fatalf("Does not expect to have step: %s", resolvedStep.Name)
+		}
+	}
+}
+
+func TestConformanceShouldProvideStepEnv(t *testing.T) {
+	envVarName := "FOO"
+	envVarVal := "foooooooo"
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    steps:
+    - name: bash
+      image: ubuntu
+      env:
+      - name: %s
+        value: %s
+      script: |
+        #!/usr/bin/env bash
+        set -euxo pipefail
+        echo "Hello from Bash!"
+        echo FOO is ${FOO}
+        echo substring is ${FOO:2:4}
+`, helpers.ObjectNameForTest(t), envVarName, envVarVal)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	resolvedStep := resolvedTR.Status.Steps[0]
+	resolvedStepTerminatedReason := resolvedStep.Terminated.Reason
+	if resolvedStepTerminatedReason != "Completed" {
+		t.Fatalf("Expect step %s to have completed successfully but it has Termination Reason: %s", resolvedStep.Name, resolvedStepTerminatedReason)
+	}
+
+	resolvedStepEnv := resolvedTR.Status.TaskSpec.Steps[0].Env[0]
+	if resolvedStepEnv.Name != envVarName {
+		t.Fatalf("Expect step %s to have EnvVar Name %s but it has: %s", resolvedStep.Name, envVarName, resolvedStepEnv.Name)
+	}
+	if resolvedStepEnv.Value != envVarVal {
+		t.Fatalf("Expect step %s to have EnvVar Value %s but it has: %s", resolvedStep.Name, envVarVal, resolvedStepEnv.Value)
+	}
+}
+
+func TestConformanceShouldProvideStepWorkingDir(t *testing.T) {
+	defaultWorkingDir := "/workspace"
+	overrideWorkingDir := "/a/path/too/far"
+
+	expectedWorkingDirs := map[string]string{
+		"default":  defaultWorkingDir,
+		"override": overrideWorkingDir,
+	}
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    steps:
+    - name: default
+      image: ubuntu
+      workingDir: %s
+      script: |
+        #!/usr/bin/env bash
+        if [[ $PWD != /workspace ]]; then
+          exit 1
+        fi
+    - name: override
+      image: ubuntu
+      workingDir: %s
+      script: |
+        #!/usr/bin/env bash
+        if [[ $PWD != /a/path/too/far ]]; then
+          exit 1
+        fi
+`, helpers.ObjectNameForTest(t), defaultWorkingDir, overrideWorkingDir)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	for _, resolvedStep := range resolvedTR.Status.Steps {
+		resolvedStepTerminatedReason := resolvedStep.Terminated.Reason
+		if resolvedStepTerminatedReason != "Completed" {
+			t.Fatalf("Expect step %s to have completed successfully but it has Termination Reason: %s", resolvedStep.Name, resolvedStepTerminatedReason)
+		}
+	}
+
+	for _, resolvedStepSpec := range resolvedTR.Status.TaskSpec.Steps {
+		resolvedStepWorkingDir := resolvedStepSpec.WorkingDir
+		if resolvedStepWorkingDir != expectedWorkingDirs[resolvedStepSpec.Name] {
+			t.Fatalf("Expect step %s to have WorkingDir %s but it has: %s", resolvedStepSpec.Name, expectedWorkingDirs[resolvedStepSpec.Name], resolvedStepWorkingDir)
+		}
+	}
+}
+
+func TestConformanceShouldProvideStringTaskParam(t *testing.T) {
+	stringParam := "foo-string"
+
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  params:
+    - name: "string-param"
+      value: %s
+  taskSpec:
+    params:
+      - name: "string-param"
+        type: string
+    steps:
+      - name: "check-param"
+        image: bash
+        script: |
+          if [[ $(params.string-param) != %s ]]; then
+            exit 1
+          fi
+`, helpers.ObjectNameForTest(t), stringParam, stringParam)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if len(resolvedTR.Spec.Params) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Param but it has: %v", len(resolvedTR.Spec.Params))
+	}
+
+	hasSucceededConditionType := false
+
+	for _, cond := range resolvedTR.Status.Conditions {
+		if cond.Type == "Succeeded" {
+			if cond.Status != "True" {
+				t.Errorf("Expect vendor service to populate Condition `True` but got: %s", cond.Status)
+			}
+			if cond.Reason != "Succeeded" {
+				t.Errorf("Expect vendor service to populate Condition Reason `Succeeded` but got: %s", cond.Reason)
+			}
+			hasSucceededConditionType = true
+		}
+	}
+
+	if !hasSucceededConditionType {
+		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in TaskRunStatus")
+	}
+
+}
+
 func TestConformanceShouldProvideArrayTaskParam(t *testing.T) {
 	var arrayParam0, arrayParam1 = "foo", "bar"
 
@@ -174,7 +462,7 @@ spec:
         type: array
       - name: array-defaul-param
         type: array
-        default: 
+        default:
         - "array-foo-default"
         - "array-bar-default"
       - name: string-param
@@ -316,20 +604,24 @@ spec:
 
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
-	if len(resolvedTR.Status.Conditions) != 1 {
-		t.Errorf("Expect vendor service to populate 1 Condition but no")
+
+	hasSucceededConditionType := false
+
+	for _, cond := range resolvedTR.Status.Conditions {
+		if cond.Type == "Succeeded" {
+			if cond.Status != "False" {
+				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
+			}
+			if cond.Reason != "TaskRunTimeout" {
+				t.Errorf("Expect vendor service to populate Condition Reason `TaskRunTimeout` but got: %s", cond.Reason)
+			}
+
+			hasSucceededConditionType = true
+		}
 	}
 
-	if resolvedTR.Status.Conditions[0].Type != "Succeeded" {
-		t.Errorf("Expect vendor service to populate Condition `Succeeded` but got: %s", resolvedTR.Status.Conditions[0].Type)
-	}
-
-	if resolvedTR.Status.Conditions[0].Status != "False" {
-		t.Errorf("Expect vendor service to populate Condition `False` but got: %s", resolvedTR.Status.Conditions[0].Status)
-	}
-
-	if resolvedTR.Status.Conditions[0].Reason != "TaskRunTimeout" {
-		t.Errorf("Expect vendor service to populate Condition Reason `TaskRunTimeout` but got: %s", resolvedTR.Status.Conditions[0].Reason)
+	if !hasSucceededConditionType {
+		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in TaskRunStatus")
 	}
 }
 
@@ -526,21 +818,25 @@ spec:
 
 	// Parse and validate output YAML
 	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
-	if len(resolvedPR.Status.Conditions) != 1 {
-		t.Errorf("Expect vendor service to populate 1 Condition but no")
+
+	hasSucceededConditionType := false
+
+	for _, cond := range resolvedPR.Status.Conditions {
+		if cond.Type == "Succeeded" {
+			if cond.Status != "False" {
+				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
+			}
+			// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed
+			if cond.Reason != "Failed" {
+				t.Errorf("Expect vendor service to populate Condition Reason `Failed` but got: %s", cond.Reason)
+			}
+
+			hasSucceededConditionType = true
+		}
 	}
 
-	if resolvedPR.Status.Conditions[0].Type != "Succeeded" {
-		t.Errorf("Expect vendor service to populate Condition `Succeeded` but got: %s", resolvedPR.Status.Conditions[0].Type)
-	}
-
-	if resolvedPR.Status.Conditions[0].Status != "False" {
-		t.Errorf("Expect vendor service to populate Condition `False` but got: %s", resolvedPR.Status.Conditions[0].Status)
-	}
-
-	// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed
-	if resolvedPR.Status.Conditions[0].Reason != "Failed" {
-		t.Errorf("Expect vendor service to populate Condition Reason `Failed` but got: %s", resolvedPR.Status.Conditions[0].Reason)
+	if !hasSucceededConditionType {
+		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
 	}
 }
 
