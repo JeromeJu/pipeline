@@ -730,7 +730,7 @@ func TestConformanceShouldProvidePipelineResult(t *testing.T) {
 apiVersion: tekton.dev/v1
 kind: PipelineRun
 metadata:
-  generateName: %s
+  name: %s
 spec:
   params:
   - name: prefix
