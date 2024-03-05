@@ -76,7 +76,13 @@ spec:
       command: ["/bin/sh", "-c"]
       args:
       - echo -n $((${OP1}*${OP2})) | tee $(results.product.path);
-`, helpers.ObjectNameForTest(t), strconv.Itoa(multiplicand), strconv.Itoa(multipliper))
+    - name: evaluate-task-result
+      image: alpine
+      script: |
+        if [[ $(results.product) != %s ]]; then
+          exit 1
+        fi
+`, helpers.ObjectNameForTest(t), strconv.Itoa(multiplicand), strconv.Itoa(multipliper), strconv.Itoa(multiplicand*multipliper))
 
 	// The execution of Pipeline CRDs that should be implemented by Vendor service
 	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
@@ -86,6 +92,8 @@ spec:
 
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	// Examining TaskRunResult
 	if len(resolvedTR.Status.Results) != 1 {
 		t.Errorf("Expect vendor service to provide 1 result but not")
 	}
@@ -427,7 +435,7 @@ spec:
 
 	// Utilizing TaskResult to verify functionality of Array Params
 	if len(resolvedTR.Status.Results) != 1 {
-		t.Errorf("Expect vendor service to provide 1 result but it has: %v": len(resolvedTR.Status.Results))
+		t.Errorf("Expect vendor service to provide 1 result but it has: %v", len(resolvedTR.Status.Results))
 	}
 	if resolvedTR.Status.Results[0].Value.StringVal != arrayParam0+"-"+arrayParam1 {
 		t.Errorf("Not producing correct result, expect to get \"%s\" but has: \"%s\"", arrayParam0+"-"+arrayParam1, resolvedTR.Status.Results[0].Value.StringVal)
