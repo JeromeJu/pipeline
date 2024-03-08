@@ -584,6 +584,79 @@ spec:
 	}
 }
 
+// The goal of the Taskrun Workspace test is to verify if different Steps in the TaskRun could
+// pass data among each other.
+func TestConformanceShouldProvideTaskRunWorkspace(t *testing.T) {
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  workspaces:
+    - name: custom-workspace
+      # Please note that vendor services are welcomed to override the following actual workspace binding type.
+      # This is considered as the implementation detail for the conformant workspace fields.
+      emptyDir: {}
+  taskSpec:
+    steps:
+    - name: write
+      image: ubuntu
+      script: echo $(workspaces.custom-workspace.path) > $(workspaces.custom-workspace.path)/foo
+    - name: read
+      image: ubuntu
+      script: cat $(workspaces.custom-workspace.path)/foo
+    - name: check
+      image: ubuntu
+      script: |
+        if [ "$(cat $(workspaces.custom-workspace.path)/foo)" != "/workspace/custom-workspace" ]; then
+          echo $(cat $(workspaces.custom-workspace.path)/foo)
+          exit 1
+        fi
+    workspaces:
+    - name: custom-workspace
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	hasSucceededConditionType := false
+
+	for _, cond := range resolvedTR.Status.Conditions {
+		if cond.Type == "Succeeded" {
+			if cond.Status != "True" {
+				t.Errorf("Expect vendor service to populate Condition `True` but got: %s", cond.Status)
+			}
+			if cond.Reason != "Succeeded" {
+				t.Errorf("Expect vendor service to populate Condition Reason `Succeeded` but got: %s", cond.Reason)
+			}
+			hasSucceededConditionType = true
+		}
+	}
+
+	if !hasSucceededConditionType {
+		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in TaskRunStatus")
+	}
+
+	if len(resolvedTR.Spec.Workspaces) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Workspace but it has: %v", len(resolvedTR.Spec.Workspaces))
+	}
+
+	if resolvedTR.Spec.Workspaces[0].Name != "custom-workspace" {
+		t.Errorf("Expect vendor service to provide Workspace 'custom-workspace' but it has: %s", resolvedTR.Spec.Workspaces[0].Name)
+	}
+
+	if resolvedTR.Status.TaskSpec.Workspaces[0].Name != "custom-workspace" {
+		t.Errorf("Expect vendor service to provide Workspace 'custom-workspace' in TaskRun.Status.TaskSpec but it has: %s", resolvedTR.Spec.Workspaces[0].Name)
+	}
+}
+
 // TestConformanceShouldHonorTaskRunTimeout examines the Timeout behaviour for
 // TaskRun level. It creates a TaskRun with Timeout and wait in the Step of the
 // inline Task for the time length longer than the specified Timeout.
@@ -792,6 +865,112 @@ spec:
 	if resolvedPR.Status.Results[0].Value.StringVal != "prefix:suffix" {
 		t.Errorf("Not producing correct result :\"%s\"", resolvedPR.Status.Results[0].Value.StringVal)
 	}
+}
+
+func TestConformanceShouldProvidePipelineWorkspace(t *testing.T) {
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: %s
+spec:
+  workspaces:
+  - name: custom-workspace
+    # Vendor service could override the actual workspace binding type.
+    # This is considered as the implementation detail for the conformant workspace fields.
+    volumeClaimTemplate:
+      spec:
+        accessModes:
+          - ReadWriteOnce
+        resources:
+          requests:
+            storage: 16Mi
+        volumeMode: Filesystem
+  pipelineSpec:
+    workspaces:
+    - name: custom-workspace
+    tasks:
+    - name: write-task
+      taskSpec:
+        steps:
+        - name: write-step
+          image: ubuntu
+          script: |
+            echo $(workspaces.custom-workspace-write-task.path) > $(workspaces.custom-workspace-write-task.path)/foo
+            cat $(workspaces.custom-workspace-write-task.path)/foo
+        workspaces:
+        - name: custom-workspace-write-task
+      workspaces:
+      - name: custom-workspace-write-task
+        workspace: custom-workspace
+    - name: read-task
+      taskSpec:
+        steps:
+        - name: read-step
+          image: ubuntu
+          script: cat $(workspaces.custom-workspace-read-task.path)/foo
+        workspaces:
+        - name: custom-workspace-read-task
+      workspaces:
+      - name: custom-workspace-read-task
+        workspace: custom-workspace
+      runAfter:
+      - write-task
+    - name: check-task
+      taskSpec:
+        steps:
+        - name: check-step
+          image: ubuntu
+          script: |
+            if [ "$(cat $(workspaces.custom-workspace-check-task.path)/foo)" != "/workspace/custom-workspace-write-task" ]; then
+              echo $(cat $(workspaces.custom-workspace-check-task.path)/foo)
+              exit 1
+            fi
+        workspaces:
+        - name: custom-workspace-check-task
+      workspaces:
+      - name: custom-workspace-check-task
+        workspace: custom-workspace
+      runAfter:
+      - read-task
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+
+	hasSucceededConditionType := false
+
+	for _, cond := range resolvedPR.Status.Conditions {
+		if cond.Type == "Succeeded" {
+			if cond.Status != "True" {
+				t.Errorf("Expect vendor service to populate Condition `True` but got: %s", cond.Status)
+			}
+			if cond.Reason != "Succeeded" {
+				t.Errorf("Expect vendor service to populate Condition Reason `Succeeded` but got: %s", cond.Reason)
+			}
+			hasSucceededConditionType = true
+		}
+	}
+
+	if !hasSucceededConditionType {
+		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
+	}
+
+	if resolvedPR.Spec.Workspaces[0].Name != "custom-workspace" {
+		t.Errorf("Expect vendor service to provide Workspace 'custom-workspace' but it has: %s", resolvedPR.Spec.Workspaces[0].Name)
+	}
+
+	if resolvedPR.Status.PipelineSpec.Workspaces[0].Name != "custom-workspace" {
+		t.Errorf("Expect vendor service to provide Workspace 'custom-workspace' in PipelineRun.Status.TaskSpec but it has: %s", resolvedPR.Spec.Workspaces[0].Name)
+	}
+
+	// TODO add more tests for WorkSpace Declaration test for PipelineTask Workspace in a separate test
 }
 
 // TestConformanceShouldHonorPipelineRunTimeout examines the Timeout behaviour for
