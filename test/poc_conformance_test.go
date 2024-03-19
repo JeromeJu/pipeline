@@ -369,22 +369,8 @@ spec:
 		t.Errorf("Expect vendor service to provide 1 Param but it has: %v", len(resolvedTR.Spec.Params))
 	}
 
-	hasSucceededConditionType := false
-
-	for _, cond := range resolvedTR.Status.Conditions {
-		if cond.Type == "Succeeded" {
-			if cond.Status != "True" {
-				t.Errorf("Expect vendor service to populate Condition `True` but got: %s", cond.Status)
-			}
-			if cond.Reason != "Succeeded" {
-				t.Errorf("Expect vendor service to populate Condition Reason `Succeeded` but got: %s", cond.Reason)
-			}
-			hasSucceededConditionType = true
-		}
-	}
-
-	if !hasSucceededConditionType {
-		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in TaskRunStatus")
+	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, "True", "Succeeded"); err != nil {
+		t.Error(err)
 	}
 
 }
@@ -686,23 +672,8 @@ spec:
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
 
-	hasSucceededConditionType := false
-
-	for _, cond := range resolvedTR.Status.Conditions {
-		if cond.Type == "Succeeded" {
-			if cond.Status != "False" {
-				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
-			}
-			if cond.Reason != "TaskRunTimeout" {
-				t.Errorf("Expect vendor service to populate Condition Reason `TaskRunTimeout` but got: %s", cond.Reason)
-			}
-
-			hasSucceededConditionType = true
-		}
-	}
-
-	if !hasSucceededConditionType {
-		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in TaskRunStatus")
+	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, "False", "TaskRunTimeout"); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -1073,6 +1044,94 @@ spec:
 	if !hasSucceededConditionType {
 		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
 	}
+
+}
+
+// ** there is no feasible way as in v1 conformance policy to test finally without
+// dependencies: results, param functionality
+func TestConformanceShouldHonorPipelineRunTaskFinally(t *testing.T) {
+	var inputOp0, inputOp1 = 3, 1
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  generateName: %s
+spec:
+  pipelineSpec:
+    params:
+      - name: a
+        type: string
+      - name: b
+        type: string
+    results:
+      - name: task-result
+        description: "grabbing results from the tasks section"
+        value: $(tasks.multiply-inputs.results.product)
+      - name: finally-result
+        description: "grabbing results from the finally section"
+        value: $(finally.exponent.results.product)
+    tasks:
+      - name: multiply-inputs
+        taskSpec:
+          results:
+            - name: product
+              description: The product of the two provided integers
+          steps:
+            - name: product
+              image: bash:latest
+              script: |
+                #!/usr/bin/env bash
+                echo -n $(( "$(params.a)" * "$(params.b)" )) | tee $(results.product.path)
+        params:
+          - name: a
+            value: "$(params.a)"
+          - name: b
+            value: "$(params.b)"
+    finally:
+      - name: exponent
+        taskSpec:
+          results:
+            - name: product
+              description: The product of the two provided integers
+          steps:
+            - name: product
+              image: bash:latest
+              script: |
+                #!/usr/bin/env bash
+                echo -n $(( "$(params.a)" * "$(params.b)" )) | tee $(results.product.path)
+        params:
+          - name: a
+            value: "$(tasks.multiply-inputs.results.product)$(tasks.multiply-inputs.results.product)"
+          - name: b
+            value: "$(tasks.multiply-inputs.results.product)$(tasks.multiply-inputs.results.product)"
+  params:
+    - name: a
+      value: %s
+    - name: b
+      value: %s
+`, helpers.ObjectNameForTest(t), strconv.Itoa(inputOp0), strconv.Itoa(inputOp1))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+	if len(resolvedPR.Status.Conditions) != 1 {
+		t.Errorf("Expect vendor service to populate 1 Condition but no")
+	}
+
+	expectedFinallyResultVal := strconv.Itoa((inputOp0*10 + inputOp0) * (inputOp1*10 + inputOp1) * inputOp0 * inputOp1)
+
+	for _, res := range resolvedPR.Status.Results {
+		if res.Name == "finally-result" {
+			if res.Value.StringVal != expectedFinallyResultVal {
+				t.Errorf("Expect vendor service to provide finally task computation to have resultVal %s, but has: %s", expectedFinallyResultVal, res.Value.StringVal)
+			}
+		}
+	}
 }
 
 // TestConformancePRShouldPopulateConditions examines population of Conditions
@@ -1278,4 +1337,27 @@ func (mvs MockVendorSerivce) GetPipelineRun(ctx context.Context, name string) (*
 		return nil, fmt.Errorf("failed to get PipelineRun `%s`: %s", prGot.Name, err)
 	}
 	return prGot, nil
+}
+
+func checkTaskrunConditionSucceeded(trStatus v1.TaskRunStatus, expectedSucceeded string, expectedReason string) error {
+	hasSucceededConditionType := false
+
+	for _, cond := range trStatus.Conditions {
+		if cond.Type == "Succeeded" {
+			if string(cond.Status) != expectedSucceeded {
+				return fmt.Errorf("Expect vendor service to populate Condition %s but got: %s", expectedSucceeded, cond.Status)
+			}
+			if cond.Reason != expectedReason {
+				return fmt.Errorf("Expect vendor service to populate Condition Reason %s but got: %s", expectedReason, cond.Reason)
+			}
+
+			hasSucceededConditionType = true
+		}
+	}
+
+	if !hasSucceededConditionType {
+		return fmt.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
+	}
+
+	return nil
 }
