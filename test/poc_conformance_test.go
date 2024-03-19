@@ -973,6 +973,55 @@ spec:
 	// TODO add more tests for WorkSpace Declaration test for PipelineTask Workspace in a separate test
 }
 
+func TestConformanceShouldHonorPipelineTaskTimeout(t *testing.T) {
+	expectedFailedStatus := true
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: %s
+spec:
+  pipelineSpec:
+    tasks:
+    - name: timeout
+      timeout: 15s
+      taskSpec:
+        steps:
+        - image: busybox
+          command: ['/bin/sh']
+          args: ['-c', 'sleep 15001']
+`, helpers.ObjectNameForTest(t))
+
+	// Execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t, expectedFailedStatus)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+
+	hasSucceededConditionType := false
+
+	for _, cond := range resolvedPR.Status.Conditions {
+		if cond.Type == "Succeeded" {
+			if cond.Status != "False" {
+				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
+			}
+			// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed
+			if cond.Reason != "Failed" {
+				t.Errorf("Expect vendor service to populate Condition Reason `Failed` but got: %s", cond.Reason)
+			}
+
+			hasSucceededConditionType = true
+		}
+	}
+
+	if !hasSucceededConditionType {
+		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
+	}
+}
+
 // TestConformanceShouldHonorPipelineRunTimeout examines the Timeout behaviour for
 // PipelineRun level. It creates a TaskRun with Timeout and wait in the Step of the
 // inline Task for the time length longer than the specified Timeout.
