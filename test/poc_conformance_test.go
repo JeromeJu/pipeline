@@ -74,7 +74,7 @@ spec:
       - name: OP2
         value: $(params.multipliper)
       command: ["/bin/sh", "-c"]
-      args:
+      ti mw:
       - echo -n $((${OP1}*${OP2})) | tee $(results.product.path);
     - name: evaluate-task-result
       image: alpine
@@ -1062,9 +1062,8 @@ spec:
 			if cond.Status != "False" {
 				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
 			}
-			// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed
-			if cond.Reason != "Failed" {
-				t.Errorf("Expect vendor service to populate Condition Reason `Failed` but got: %s", cond.Reason)
+			if cond.Reason != "PipelineRunTimeout" {
+				t.Errorf("Expect vendor service to populate Condition Reason `PipelineRunTimeout` but got: %s", cond.Reason)
 			}
 
 			hasSucceededConditionType = true
