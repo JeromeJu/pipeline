@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/google/go-cmp/cmp"
@@ -379,6 +380,187 @@ spec:
 		if resolvedStepWorkingDir != expectedWorkingDirs[resolvedStepSpec.Name] {
 			t.Fatalf("Expect step %s to have WorkingDir %s but it has: %s", resolvedStepSpec.Name, expectedWorkingDirs[resolvedStepSpec.Name], resolvedStepWorkingDir)
 		}
+	}
+}
+
+func TestStepStateImageID(t *testing.T) {
+	// Step images can be specified by digest.
+	image := "busybox@sha256:1303dbf110c57f3edf68d9f5a16c082ec06c4cf7604831669faf2c712260b5a0"
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    steps:
+    - image: %s
+      args: ['-c', 'echo hello']
+`, helpers.ObjectNameForTest(t), image)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
+	}
+
+	if len(resolvedTR.Status.Steps) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Step in StepState but it has: %v", len(resolvedTR.Status.Steps))
+	}
+
+	if !strings.HasSuffix(resolvedTR.Status.Steps[0].ImageID, image) {
+		t.Errorf("Expect vendor service to provide image %s in StepState but it has: %s", image, resolvedTR.Status.Steps[0].ImageID)
+	}
+}
+
+func TestStepStateName(t *testing.T) {
+	stepName := "step-foo"
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    steps:
+    - name: %s
+      image: busybox
+      args: ['-c', 'echo hello']
+`, helpers.ObjectNameForTest(t), stepName)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
+	}
+
+	if len(resolvedTR.Status.Steps) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Step in StepState but it has: %v", len(resolvedTR.Status.Steps))
+	}
+
+	if resolvedTR.Status.Steps[0].Name != stepName {
+		t.Errorf("Expect vendor service to provide Name %s in StepState but it has: %s", stepName, resolvedTR.Status.Steps[0].Name)
+	}
+}
+
+// Examines the ContainerStateTerminated ExitCode, StartedAt, FinishtedAt and Reason
+func TestStepStateContainerStateTerminated(t *testing.T) {
+	successInputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    steps:
+    - image: busybox
+      args: ['-c', 'echo hello']
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	successOutputYAML, err := ProcessAndSendToTekton(successInputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	successResolvedTR := parse.MustParseV1TaskRun(t, successOutputYAML)
+
+	if err := checkTaskRunConditionSucceeded(successResolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
+	}
+
+	if len(successResolvedTR.Status.Steps) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Step in StepState but it has: %v", len(successResolvedTR.Status.Steps))
+	}
+
+	startTime := successResolvedTR.Status.Steps[0].Terminated.StartedAt
+	finishTime := successResolvedTR.Status.Steps[0].Terminated.FinishedAt
+
+	if startTime.IsZero() {
+		t.Errorf("Expect vendor service to provide StartTimeStamp in StepState.Terminated but it does not provide so")
+	}
+
+	if finishTime.IsZero() {
+		t.Errorf("Expect vendor service to provide FinishTimeStamp in StepState.Terminated but it does not provide so")
+	}
+
+	if finishTime.Before(&startTime) {
+		t.Errorf("Expect vendor service to provide StartTimeStamp %v earlier than FinishTimeStamp in StepState.Terminated %v but it does not provide so", startTime, finishTime)
+	}
+
+	if successResolvedTR.Status.Steps[0].Terminated.ExitCode != 0 {
+		t.Errorf("Expect vendor service to provide ExitCode in StepState.Terminated to be 0 but it has: %v", successResolvedTR.Status.Steps[0].Terminated.ExitCode)
+	}
+
+	if successResolvedTR.Status.Steps[0].Terminated.Reason != "Completed" {
+		t.Errorf("Expect vendor service to provide Reason in StepState.Terminated to be Completed but it has: %s", successResolvedTR.Status.Steps[0].Terminated.Reason)
+	}
+
+	failureInputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  taskSpec:
+    steps:
+    - image: busybox
+      script: exit 1
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	failureOutputYAML, err := ProcessAndSendToTekton(failureInputYAML, TaskRunInputType, t, ExpectRunToFail)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	failureResolvedTR := parse.MustParseV1TaskRun(t, failureOutputYAML)
+
+	if err := checkTaskRunConditionSucceeded(failureResolvedTR.Status, FailureConditionStatus, "Failed"); err != nil {
+		t.Error(err)
+	}
+
+	if len(failureResolvedTR.Status.Steps) != 1 {
+		t.Errorf("Expect vendor service to provide 1 Step in StepState but it has: %v", len(failureResolvedTR.Status.Steps))
+	}
+
+	startTime = failureResolvedTR.Status.Steps[0].Terminated.StartedAt
+	finishTime = failureResolvedTR.Status.Steps[0].Terminated.FinishedAt
+
+	if startTime.IsZero() {
+		t.Errorf("Expect vendor service to provide StartTimeStamp in StepState.Terminated but it does not provide so")
+	}
+
+	if finishTime.IsZero() {
+		t.Errorf("Expect vendor service to provide FinishTimeStamp in StepState.Terminated but it does not provide so")
+	}
+
+	if finishTime.Before(&startTime) {
+		t.Errorf("Expect vendor service to provide StartTimeStamp %v earlier than FinishTimeStamp in StepState.Terminated %v but it does not provide so", startTime, finishTime)
+	}
+
+	if failureResolvedTR.Status.Steps[0].Terminated.ExitCode != 1 {
+		t.Errorf("Expect vendor service to provide ExitCode in StepState.Terminated to be 0 but it has: %v", failureResolvedTR.Status.Steps[0].Terminated.ExitCode)
+	}
+
+	if failureResolvedTR.Status.Steps[0].Terminated.Reason != "Error" {
+		t.Errorf("Expect vendor service to provide Reason in StepState.Terminated to be Error but it has: %s", failureResolvedTR.Status.Steps[0].Terminated.Reason)
 	}
 }
 
