@@ -106,6 +106,54 @@ spec:
 	}
 }
 
+// TestConformanceShouldProvideTaskRef tests the functionality of referencing
+// to a Task that is either local or remote. The TaskRef field is REUIQRED while
+// all of its fields are RECOMMENDED.
+// Vendors could overwrite the actual use case of the input TaskRef.
+func TestConformanceShouldProvideTaskRef(t *testing.T) {
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: TaskRun
+metadata:
+  name: %s
+spec:
+  workspaces:
+  - name: output
+    emptyDir: {}
+  params:
+  - name: url
+    value: https://github.com/kelseyhightower/nocode
+  - name: revision
+    value: master
+  taskRef:
+    # Vendors are welcomed to overwrite the previous section as the actual use
+    # cases for TaskRef are not REQUIRED - it could be either a remote Task
+    # resolved by the resolver or a local Task.
+    # Below is an example used for remote Task
+    resolver: git
+    params:
+      - name: url
+        value: https://github.com/tektoncd/catalog.git
+      - name: revision
+        value: main
+      - name: pathInRepo
+        value: task/git-clone/0.8/git-clone.yaml
+`, helpers.ObjectNameForTest(t))
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, TaskRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
+	}
+
+	// Parse and validate output YAML
+	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
+
+	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
+	}
+}
+
 func TestConformanceShouldProvideStepScript(t *testing.T) {
 	expectedSteps := map[string]string{
 		"noshebang":                 "Completed",
