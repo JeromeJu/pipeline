@@ -8,7 +8,7 @@ It mocks the vendor service execution of TaskRuns and PipelineRuns utilizing the
 Tekton clients to mock the controller of a conformant vendor service.
 
 Please use the following for triggering the test:
-go test -v -tags=conformance -count=1 ./test -run ^TestConformance
+go test -v -tags=conformance -count=1 ./test -run ^Test
 
 The next step will be to integrate this test as POC with v2 API.
 */
@@ -45,10 +45,10 @@ const (
 //       iii. add Succeeded check for all status
 //       iv.  extract generic functions to helpers i.e. checkConditionSucceeded
 
-// TestConformanceShouldProvideTaskResult examines the TaskResult functionality
+// TestTaskResult examines the TaskResult functionality
 // by creating a TaskRun that performs multiplication in Steps to write to the
 // Task-level result for validation.
-func TestConformanceShouldProvideTaskResult(t *testing.T) {
+func TestTaskResult(t *testing.T) {
 	var multiplicand, multipliper = 3, 5
 
 	inputYAML := fmt.Sprintf(`
@@ -106,11 +106,11 @@ spec:
 	}
 }
 
-// TestConformanceShouldProvideTaskRef tests the functionality of referencing
+// TestTaskRef tests the functionality of referencing
 // to a Task that is either local or remote. The TaskRef field is REUIQRED while
 // all of its fields are RECOMMENDED.
 // Vendors could overwrite the actual use case of the input TaskRef.
-func TestConformanceShouldProvideTaskRef(t *testing.T) {
+func TestTaskRef(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -149,12 +149,12 @@ spec:
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
 
-	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestConformanceShouldProvideStepScript(t *testing.T) {
+func TestStepScript(t *testing.T) {
 	expectedSteps := map[string]string{
 		"noshebang":                 "Completed",
 		"node":                      "Completed",
@@ -274,7 +274,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvideStepEnv(t *testing.T) {
+func TestStepEnv(t *testing.T) {
 	envVarName := "FOO"
 	envVarVal := "foooooooo"
 
@@ -323,7 +323,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvideStepWorkingDir(t *testing.T) {
+func TestStepWorkingDir(t *testing.T) {
 	defaultWorkingDir := "/workspace"
 	overrideWorkingDir := "/a/path/too/far"
 
@@ -382,7 +382,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvideSidecarName(t *testing.T) {
+func TestSidecarName(t *testing.T) {
 	sidecarName := "hello-sidecar"
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
@@ -410,7 +410,7 @@ spec:
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
 
-	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
 		t.Error(err)
 	}
 
@@ -428,7 +428,7 @@ spec:
 // our own shared volume. For vendor services, please feel free to override the shared workspace
 // supported in your sidecar. Otherwise there are no existing v1 conformance `REQUIRED` fields that
 // are going to be used for verifying Sidecar functionality.
-func TestConformanceShouldProvideSidecarScriptSuccess(t *testing.T) {
+func TestSidecarScriptSuccess(t *testing.T) {
 	succeedInputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -469,12 +469,12 @@ spec:
 	// Parse and validate output YAML
 	succeededResolvedTR := parse.MustParseV1TaskRun(t, succeedOutputYAML)
 
-	if err := checkTaskrunConditionSucceeded(succeededResolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+	if err := checkTaskRunConditionSucceeded(succeededResolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestConformanceShouldProvideSidecarScriptFailure(t *testing.T) {
+func TestSidecarScriptFailure(t *testing.T) {
 	failInputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -515,12 +515,12 @@ spec:
 		t.Errorf("Expect vendor service to provide 1 Sidcar but it has: %v", len(failResolvedTR.Spec.TaskSpec.Sidecars))
 	}
 
-	if err := checkTaskrunConditionSucceeded(failResolvedTR.Status, "False", "Failed"); err != nil {
+	if err := checkTaskRunConditionSucceeded(failResolvedTR.Status, "False", "Failed"); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestConformanceShouldProvideSidecarArgAndCommand(t *testing.T) {
+func TestSidecarArgAndCommand(t *testing.T) {
 	failInputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -567,12 +567,12 @@ spec:
 		t.Errorf("Expect vendor service to provide 1 Sidcar but it has: %v", len(failResolvedTR.Spec.TaskSpec.Sidecars))
 	}
 
-	if err := checkTaskrunConditionSucceeded(failResolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+	if err := checkTaskRunConditionSucceeded(failResolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
 		t.Error(err)
 	}
 }
 
-func TestConformanceShouldProvideStringTaskParam(t *testing.T) {
+func TestStringTaskParam(t *testing.T) {
 	stringParam := "foo-string"
 
 	inputYAML := fmt.Sprintf(`
@@ -610,13 +610,13 @@ spec:
 		t.Errorf("Expect vendor service to provide 1 Param but it has: %v", len(resolvedTR.Spec.Params))
 	}
 
-	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
 		t.Error(err)
 	}
 
 }
 
-func TestConformanceShouldProvideArrayTaskParam(t *testing.T) {
+func TestArrayTaskParam(t *testing.T) {
 	var arrayParam0, arrayParam1 = "foo", "bar"
 
 	inputYAML := fmt.Sprintf(`
@@ -669,7 +669,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvideTaskParamDefaults(t *testing.T) {
+func TestTaskParamDefaults(t *testing.T) {
 	stringParam := "string-foo"
 	arrayParam := []string{"array-foo", "array-bar"}
 	expectedStringParamResultVal := "string-foo-string-baz-default"
@@ -770,7 +770,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvideTaskParamDescription(t *testing.T) {
+func TestTaskParamDescription(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -813,7 +813,7 @@ spec:
 
 // The goal of the Taskrun Workspace test is to verify if different Steps in the TaskRun could
 // pass data among each other.
-func TestConformanceShouldProvideTaskRunWorkspace(t *testing.T) {
+func TestTaskRunWorkspace(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -853,7 +853,7 @@ spec:
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
 
-	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
 		t.Error(err)
 	}
 
@@ -870,11 +870,11 @@ spec:
 	}
 }
 
-// TestConformanceShouldHonorTaskRunTimeout examines the Timeout behaviour for
+// TestTaskRunTimeout examines the Timeout behaviour for
 // TaskRun level. It creates a TaskRun with Timeout and wait in the Step of the
 // inline Task for the time length longer than the specified Timeout.
 // The TaskRun is expected to fail with the Reason `TaskRunTimeout`.
-func TestConformanceShouldHonorTaskRunTimeout(t *testing.T) {
+func TestTaskRunTimeout(t *testing.T) {
 	expectedFailedStatus := true
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
@@ -899,15 +899,15 @@ spec:
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
 
-	if err := checkTaskrunConditionSucceeded(resolvedTR.Status, "False", "TaskRunTimeout"); err != nil {
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, "False", "TaskRunTimeout"); err != nil {
 		t.Error(err)
 	}
 }
 
-// TestConformanceShouldPopulateConditions examines population of Conditions
+// TestConditions examines population of Conditions
 // fields. It creates the a TaskRun with minimal specifications and checks the
 // required Condition Status and Type.
-func TestConformanceShouldPopulateConditions(t *testing.T) {
+func TestConditions(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: TaskRun
@@ -930,23 +930,16 @@ spec:
 
 	// Parse and validate output YAML
 	resolvedTR := parse.MustParseV1TaskRun(t, outputYAML)
-	if len(resolvedTR.Status.Conditions) != 1 {
-		t.Errorf("Expect vendor service to populate 1 Condition but no")
-	}
 
-	if resolvedTR.Status.Conditions[0].Type != "Succeeded" {
-		t.Errorf("Expect vendor service to populate Condition `Succeeded` but got: %s", resolvedTR.Status.Conditions[0].Type)
-	}
-
-	if resolvedTR.Status.Conditions[0].Status != "True" {
-		t.Errorf("Expect vendor service to populate Condition `True` but got: %s", resolvedTR.Status.Conditions[0].Status)
+	if err := checkTaskRunConditionSucceeded(resolvedTR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
 	}
 }
 
-// TestConformanceShouldProvidePipelineTaskParams examines the PipelineTask
+// TestPipelineTaskParams examines the PipelineTask
 // Params functionality by creating a Pipeline that performs addition in its
 // Task for validation.
-func TestConformanceShouldProvidePipelineTaskParams(t *testing.T) {
+func TestPipelineTaskParams(t *testing.T) {
 	var op0, op1 = 10, 1
 	expectedParams := v1.Params{{
 		Name:  "op0",
@@ -1004,7 +997,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvidePipelineResult(t *testing.T) {
+func TestPipelineResult(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: PipelineRun
@@ -1065,7 +1058,7 @@ spec:
 	}
 }
 
-func TestConformanceShouldProvidePipelineWorkspace(t *testing.T) {
+func TestPipelineWorkspace(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: PipelineRun
@@ -1157,7 +1150,7 @@ spec:
 	// TODO add more tests for WorkSpace Declaration test for PipelineTask Workspace in a separate test
 }
 
-func TestConformanceShouldHonorPipelineTaskTimeout(t *testing.T) {
+func TestPipelineTaskTimeout(t *testing.T) {
 	expectedFailedStatus := true
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
@@ -1191,11 +1184,11 @@ spec:
 	}
 }
 
-// TestConformanceShouldHonorPipelineRunTimeout examines the Timeout behaviour for
+// TestPipelineRunTimeout examines the Timeout behaviour for
 // PipelineRun level. It creates a TaskRun with Timeout and wait in the Step of the
 // inline Task for the time length longer than the specified Timeout.
 // The TaskRun is expected to fail with the Reason `TaskRunTimeout`.
-func TestConformanceShouldHonorPipelineRunTimeout(t *testing.T) {
+func TestPipelineRunTimeout(t *testing.T) {
 	expectedFailedStatus := true
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
@@ -1232,7 +1225,7 @@ spec:
 
 // ** there is no feasible way as in v1 conformance policy to test finally without
 // dependencies: results, param functionality
-func TestConformanceShouldHonorPipelineRunTaskFinally(t *testing.T) {
+func TestPipelineRunTaskFinally(t *testing.T) {
 	var inputOp0, inputOp1 = 3, 1
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
@@ -1317,10 +1310,10 @@ spec:
 	}
 }
 
-// TestConformancePRShouldPopulateConditions examines population of Conditions
+// TestPipelineRunConditions examines population of Conditions
 // fields. It creates the a PipelineRun with minimal specifications and checks the
 // required Condition Status and Type.
-func TestConformancePRShouldPopulateConditions(t *testing.T) {
+func TestPipelineRunConditions(t *testing.T) {
 	inputYAML := fmt.Sprintf(`
 apiVersion: tekton.dev/v1
 kind: PipelineRun
@@ -1522,10 +1515,10 @@ func (mvs MockVendorSerivce) GetPipelineRun(ctx context.Context, name string) (*
 	return prGot, nil
 }
 
-// checkTaskrunConditionSucceeded checks the TaskRun Succeeded Condition;
+// checkTaskRunConditionSucceeded checks the TaskRun Succeeded Condition;
 // expectedSucceeded is a corev1.ConditionStatus(string), which is either "True" or "False"
 // expectedReason is string, the expected Condition.Reason
-func checkTaskrunConditionSucceeded(trStatus v1.TaskRunStatus, expectedSucceededStatus string, expectedReason string) error {
+func checkTaskRunConditionSucceeded(trStatus v1.TaskRunStatus, expectedSucceededStatus string, expectedReason string) error {
 	hasSucceededConditionType := false
 
 	for _, cond := range trStatus.Conditions {
