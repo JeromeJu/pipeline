@@ -1142,22 +1142,8 @@ spec:
 	// Parse and validate output YAML
 	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
 
-	hasSucceededConditionType := false
-
-	for _, cond := range resolvedPR.Status.Conditions {
-		if cond.Type == "Succeeded" {
-			if cond.Status != "True" {
-				t.Errorf("Expect vendor service to populate Condition `True` but got: %s", cond.Status)
-			}
-			if cond.Reason != "Succeeded" {
-				t.Errorf("Expect vendor service to populate Condition Reason `Succeeded` but got: %s", cond.Reason)
-			}
-			hasSucceededConditionType = true
-		}
-	}
-
-	if !hasSucceededConditionType {
-		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
+	if err := checkPipelineRunConditionSucceeded(resolvedPR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
 	}
 
 	if resolvedPR.Spec.Workspaces[0].Name != "custom-workspace" {
@@ -1199,24 +1185,9 @@ spec:
 	// Parse and validate output YAML
 	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
 
-	hasSucceededConditionType := false
-
-	for _, cond := range resolvedPR.Status.Conditions {
-		if cond.Type == "Succeeded" {
-			if cond.Status != "False" {
-				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
-			}
-			// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed
-			if cond.Reason != "Failed" {
-				t.Errorf("Expect vendor service to populate Condition Reason `Failed` but got: %s", cond.Reason)
-			}
-
-			hasSucceededConditionType = true
-		}
-	}
-
-	if !hasSucceededConditionType {
-		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
+	// TODO to examine PipelineRunReason when https://github.com/tektoncd/pipeline/issues/7573 is fixed - PipelineTaskTimeout
+	if err := checkPipelineRunConditionSucceeded(resolvedPR.Status, FailureConditionStatus, "Failed"); err != nil {
+		t.Error(err)
 	}
 }
 
@@ -1253,23 +1224,8 @@ spec:
 	// Parse and validate output YAML
 	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
 
-	hasSucceededConditionType := false
-
-	for _, cond := range resolvedPR.Status.Conditions {
-		if cond.Type == "Succeeded" {
-			if cond.Status != "False" {
-				t.Errorf("Expect vendor service to populate Condition `False` but got: %s", cond.Status)
-			}
-			if cond.Reason != "PipelineRunTimeout" {
-				t.Errorf("Expect vendor service to populate Condition Reason `PipelineRunTimeout` but got: %s", cond.Reason)
-			}
-
-			hasSucceededConditionType = true
-		}
-	}
-
-	if !hasSucceededConditionType {
-		t.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in PipelineRunStatus")
+	if err := checkPipelineRunConditionSucceeded(resolvedPR.Status, FailureConditionStatus, "PipelineRunTimeout"); err != nil {
+		t.Error(err)
 	}
 
 }
@@ -1569,13 +1525,39 @@ func (mvs MockVendorSerivce) GetPipelineRun(ctx context.Context, name string) (*
 // checkTaskrunConditionSucceeded checks the TaskRun Succeeded Condition;
 // expectedSucceeded is a corev1.ConditionStatus(string), which is either "True" or "False"
 // expectedReason is string, the expected Condition.Reason
-func checkTaskrunConditionSucceeded(trStatus v1.TaskRunStatus, expectedSucceeded string, expectedReason string) error {
+func checkTaskrunConditionSucceeded(trStatus v1.TaskRunStatus, expectedSucceededStatus string, expectedReason string) error {
 	hasSucceededConditionType := false
 
 	for _, cond := range trStatus.Conditions {
 		if cond.Type == "Succeeded" {
-			if string(cond.Status) != expectedSucceeded {
-				return fmt.Errorf("Expect vendor service to populate Condition %s but got: %s", expectedSucceeded, cond.Status)
+			if string(cond.Status) != expectedSucceededStatus {
+				return fmt.Errorf("Expect vendor service to populate Condition %s but got: %s", expectedSucceededStatus, cond.Status)
+			}
+			if cond.Reason != expectedReason {
+				return fmt.Errorf("Expect vendor service to populate Condition Reason %s but got: %s", expectedReason, cond.Reason)
+			}
+
+			hasSucceededConditionType = true
+		}
+	}
+
+	if !hasSucceededConditionType {
+		return fmt.Errorf("Expect vendor service to populate Succeeded Condition but not apparent in TaskRunStatus")
+	}
+
+	return nil
+}
+
+// checkPipelineRunConditionSucceeded checks the PipelineRun Succeeded Condition;
+// expectedSucceeded is a corev1.ConditionStatus(string), which is either "True" or "False"
+// expectedReason is string, the expected Condition.Reason
+func checkPipelineRunConditionSucceeded(prStatus v1.PipelineRunStatus, expectedSucceededStatus string, expectedReason string) error {
+	hasSucceededConditionType := false
+
+	for _, cond := range prStatus.Conditions {
+		if cond.Type == "Succeeded" {
+			if string(cond.Status) != expectedSucceededStatus {
+				return fmt.Errorf("Expect vendor service to populate Condition %s but got: %s", expectedSucceededStatus, cond.Status)
 			}
 			if cond.Reason != expectedReason {
 				return fmt.Errorf("Expect vendor service to populate Condition Reason %s but got: %s", expectedReason, cond.Reason)
