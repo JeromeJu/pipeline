@@ -1521,17 +1521,71 @@ spec:
 
 	// Parse and validate output YAML
 	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
-	if len(resolvedPR.Status.Conditions) != 1 {
-		t.Errorf("Expect vendor service to populate 1 Condition but no")
+
+	if err := checkPipelineRunConditionSucceeded(resolvedPR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
+	}
+}
+
+func TestPipelineRunChildReferences(t *testing.T) {
+	prName := helpers.ObjectNameForTest(t)
+	pt0, pt1 := "pipeline-task-0", "pipeline-task-1"
+	expectedChildRefs := map[string]string{
+		pt0: prName + "-" + pt0,
+		pt1: prName + "-" + pt1,
 	}
 
-	if resolvedPR.Status.Conditions[0].Type != "Succeeded" {
-		t.Errorf("Expect vendor service to populate Condition `Succeeded` but got: %s", resolvedPR.Status.Conditions[0].Type)
+	inputYAML := fmt.Sprintf(`
+apiVersion: tekton.dev/v1
+kind: PipelineRun
+metadata:
+  name: %s
+spec:
+  pipelineSpec:
+    tasks:
+    - name: %s
+      taskSpec:
+        steps:
+        - name: hello-step
+          image: ubuntu
+          script:
+            echo Hello world!
+    - name: %s
+      taskSpec:
+        steps:
+        - name: hell-step
+          image: ubuntu
+          script:
+            echo Hello world!
+`, prName, pt0, pt1)
+
+	// The execution of Pipeline CRDs that should be implemented by Vendor service
+	outputYAML, err := ProcessAndSendToTekton(inputYAML, PipelineRunInputType, t)
+	if err != nil {
+		t.Fatalf("Vendor service failed processing inputYAML: %s", err)
 	}
 
-	if resolvedPR.Status.Conditions[0].Status != "True" {
-		t.Errorf("Expect vendor service to populate Condition `True` but got: %s", resolvedPR.Status.Conditions[0].Status)
+	// Parse and validate output YAML
+	resolvedPR := parse.MustParseV1PipelineRun(t, outputYAML)
+
+	if err := checkPipelineRunConditionSucceeded(resolvedPR.Status, SucceedConditionStatus, "Succeeded"); err != nil {
+		t.Error(err)
 	}
+
+	if len(resolvedPR.Status.ChildReferences) != 2 {
+		t.Errorf("Expect vendor service to have 2 ChildReferences but it has: %v", len(resolvedPR.Status.ChildReferences))
+	}
+
+	for _, cr := range resolvedPR.Status.ChildReferences {
+		if childRefName, ok := expectedChildRefs[cr.PipelineTaskName]; ok {
+			if childRefName != cr.Name {
+				t.Errorf("Expect vendor service to populate ChildReferenceStatus Name %s but it has: %s", childRefName, cr.Name)
+			}
+		} else {
+			t.Errorf("Does not expect vendor service to populate ChildReferenceStatus PipelineTaskName: %s", cr.PipelineTaskName)
+		}
+	}
+
 }
 
 // ProcessAndSendToTekton takes in vanilla Tekton PipelineRun and TaskRun, waits for the object to succeed and outputs the final PipelineRun and TaskRun with status.
