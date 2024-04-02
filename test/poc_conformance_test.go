@@ -78,7 +78,7 @@ spec:
       - name: OP2
         value: $(params.multipliper)
       command: ["/bin/sh", "-c"]
-      ti mw:
+      args:
       - echo -n $((${OP1}*${OP2})) | tee $(results.product.path);
     - name: evaluate-task-result
       image: alpine
